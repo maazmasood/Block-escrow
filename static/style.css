@@ -1,0 +1,177 @@
+/* style.css */
+:root {
+    --main-bg-color: #0f172a; /* Slate 900 */
+    --second-bg-color: #1e293b; /* Slate 800 */
+    --sidebar-bg-color: #1e293b;
+    --primary-color: #3b82f6; /* Blue 500 */
+    --secondary-color: #64748b; /* Slate 500 */
+    --text-primary: #f8fafc; /* Slate 50 */
+    --text-secondary: #94a3b8; /* Slate 400 */
+    --glass-bg: rgba(30, 41, 59, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+body {
+    background-color: var(--main-bg-color);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    overflow-x: hidden;
+}
+
+/* Glassmorphism Classes */
+.bg-glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+}
+
+.bg-dark-glass {
+    background: #111827;
+    border-right: 1px solid var(--glass-border);
+}
+
+/* Sidebar Styles */
+#wrapper {
+    overflow-x: hidden;
+    background-image: linear-gradient(to bottom right, #0f172a, #1e293b);
+    min-height: 100vh;
+}
+
+#sidebar-wrapper {
+    min-height: 100vh;
+    margin-left: -15rem;
+    -webkit-transition: margin .25s ease-out;
+    -moz-transition: margin .25s ease-out;
+    -o-transition: margin .25s ease-out;
+    transition: margin .25s ease-out;
+    width: 15rem;
+    position: fixed;
+    z-index: 1000;
+}
+
+#sidebar-wrapper .sidebar-heading {
+    padding: 0.875rem 1.25rem;
+    font-size: 1.2rem;
+    color: var(--text-primary);
+}
+
+#sidebar-wrapper .list-group {
+    width: 15rem;
+}
+
+#page-content-wrapper {
+    width: 100%;
+    margin-left: 0; /* Initially 0 because sidebar is hidden */
+    transition: margin .25s ease-out;
+}
+
+#wrapper.toggled #sidebar-wrapper {
+    margin-left: 0;
+}
+
+#wrapper.toggled #page-content-wrapper {
+    margin-left: 15rem; /* Push content when toggled */
+    width: calc(100% - 15rem);
+}
+
+/* Sidebar Links */
+.list-group-item {
+    border: none;
+    padding: 20px 30px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    transition: all 0.3s;
+}
+
+.list-group-item:hover {
+    color: var(--primary-color);
+    background-color: rgba(59, 130, 246, 0.1) !important;
+    border-left: 4px solid var(--primary-color);
+}
+
+.list-group-item.active {
+    background-color: transparent;
+    color: var(--primary-color);
+    font-weight: bold;
+    border-left: 4px solid var(--primary-color);
+}
+
+/* Colors & Utilities */
+.primary-text { color: var(--primary-color); }
+.second-text { color: var(--text-secondary); }
+.text-gray-300 { color: #cbd5e1; }
+.text-gray-400 { color: #94a3b8; }
+
+.rounded-full { border-radius: 50%; }
+
+/* Card Enhancements */
+.card {
+    border: none;
+    transition: transform 0.3s;
+}
+
+/* Form Controls Dark Mode */
+.form-control, .form-select {
+    background-color: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--secondary-color);
+    color: var(--text-primary);
+}
+
+.form-control:focus, .form-select:focus {
+    background-color: rgba(15, 23, 42, 0.8);
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+    box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25);
+}
+
+.form-control::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.6;
+}
+
+/* Buttons */
+.btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+.btn-primary:hover {
+    background-color: #2563eb;
+}
+
+/* Scrollbar Customization */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: var(--main-bg-color); 
+}
+::-webkit-scrollbar-thumb {
+    background: var(--secondary-color); 
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #475569; 
+}
+
+/* Responsive Toggles */
+@media (min-width: 768px) {
+    #sidebar-wrapper {
+        margin-left: 0;
+        position: relative; /* Change to relative on desktop */
+    }
+
+    #page-content-wrapper {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    #wrapper.toggled #sidebar-wrapper {
+        margin-left: -15rem;
+    }
+    
+    #wrapper.toggled #page-content-wrapper {
+        margin-left: 0;
+        width: 100%;
+    }
+}

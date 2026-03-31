@@ -1,0 +1,63 @@
+{% extends "layout.html" %}
+
+{% block title %}Transactions{% endblock %}
+{% block page_title %}Transaction History{% endblock %}
+
+{% block content %}
+<div class="card bg-glass shadow-sm text-white">
+    <div
+        class="card-header bg-transparent border-bottom border-secondary d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-bold"><i class="fas fa-list me-2"></i>All Escrows</h5>
+        <button class="btn btn-sm btn-danger" onclick="clearTransactions()">Clear History</button>
+    </div>
+    <div class="card-body table-responsive">
+        {% if escrows %}
+        <table class="table table-dark table-hover table-borderless align-middle">
+            <thead class="table-secondary">
+                <tr>
+                    <th>ID</th>
+                    <th>Buyer</th>
+                    <th>Seller</th>
+                    <th>Amount (ETH)</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for escrow in escrows %}
+                <tr>
+                    <td>#{{ escrow.id }}</td>
+                    <td title="{{ escrow.buyer_address }}">{{ escrow.buyer_address[:10] }}...</td>
+                    <td title="{{ escrow.seller_address }}">{{ escrow.seller_address[:10] }}...</td>
+                    <td>{{ escrow.amount_eth }}</td>
+                    <td><span class="badge bg-{{ 'success' if escrow.status == 'Released' else 'warning' }}">{{
+                            escrow.status }}</span></td>
+                    <td>{{ escrow.created_at.strftime('%Y-%m-%d') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted text-center my-4">No transactions found.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    async function clearTransactions() {
+        if (!confirm("Are you sure you want to clear all transaction history?")) return;
+
+        try {
+            const res = await fetch('/api/transactions/clear', { method: 'POST' });
+            if (res.ok) {
+                location.reload();
+            } else {
+                alert("Failed to clear transactions.");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Error connecting to server.");
+        }
+    }
+</script>
+{% endblock %}

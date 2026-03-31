@@ -1,0 +1,48 @@
+[
+    {
+        "inputs": [
+            { "internalType": "uint256", "name": "_ethId", "type": "uint256" },
+            { "internalType": "address", "name": "_buyer", "type": "address" },
+            { "internalType": "address", "name": "_seller", "type": "address" },
+            { "internalType": "address", "name": "_agent", "type": "address" },
+            { "internalType": "uint256", "name": "_amount", "type": "uint256" },
+            { "internalType": "string", "name": "_ipfsHash", "type": "string" }
+        ],
+        "name": "syncFromETH",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
+        "name": "confirmUserB",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+        "name": "escrows",
+        "outputs": [
+            { "internalType": "uint256", "name": "ethId", "type": "uint256" },
+            { "internalType": "address", "name": "buyer", "type": "address" },
+            { "internalType": "address", "name": "seller", "type": "address" },
+            { "internalType": "address", "name": "agent", "type": "address" },
+            { "internalType": "uint256", "name": "amount", "type": "uint256" },
+            { "internalType": "string", "name": "ipfsHash", "type": "string" },
+            { "internalType": "bool", "name": "confirmedByBNB", "type": "bool" },
+            { "internalType": "bool", "name": "released", "type": "bool" }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            { "indexed": true, "internalType": "uint256", "name": "id", "type": "uint256" },
+            { "indexed": false, "internalType": "address", "name": "seller", "type": "address" }
+        ],
+        "name": "UserBConfirmed",
+        "type": "event"
+    }
+]

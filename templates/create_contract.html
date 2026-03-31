@@ -1,0 +1,75 @@
+{% extends "layout.html" %}
+
+{% block title %}Create Contract{% endblock %}
+{% block page_title %}Create New Escrow{% endblock %}
+
+{% block content %}
+
+
+<!-- New Escrow Creation -->
+<div class="row my-4" id="user1-actions">
+    <div class="col-lg-12">
+        <div class="card bg-glass shadow-sm text-white">
+            <div class="card-header bg-transparent border-bottom border-secondary">
+                <h5 class="mb-0 fw-bold"><i class="fas fa-plus-circle me-2"></i>Initiate New Escrow</h5>
+            </div>
+            <div class="card-body">
+                <!-- IPFS Upload -->
+                <div class="mb-4">
+                    <label class="form-label text-gray-300">1. Upload Agreement (IPFS)</label>
+                    <div class="input-group">
+                        <input type="file" class="form-control bg-dark text-white border-secondary" id="fileInput">
+                        <button class="btn btn-warning" type="button" id="uploadIpfsBtn"><i
+                                class="fas fa-cloud-upload-alt me-2"></i>Upload</button>
+                    </div>
+                    <div id="ipfsResultBox" class="mt-2 p-2 rounded bg-dark border border-secondary"
+                        style="display: none;">
+                        <small class="text-success"><i class="fas fa-check-circle me-1"></i> Uploaded! CID: <span
+                                id="ipfsHashDisplay" class="text-white"></span></small>
+                    </div>
+                </div>
+
+                <!-- Transaction Details -->
+                <label class="form-label text-gray-300">2. Transaction Details</label>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <input type="text" id="receiver" class="form-control bg-dark text-white border-secondary"
+                            placeholder="Receiver Address (User 2)">
+                    </div>
+                    <div class="col-md-6">
+                        <input type="text" id="agentAddress" class="form-control bg-dark text-white border-secondary"
+                            placeholder="Agent Address (Mediator)">
+                    </div>
+                    <div class="col-md-6">
+                        <input type="text" id="ipfsHashInput" class="form-control bg-dark text-white border-secondary"
+                            placeholder="IPFS CID (Auto-filled)" readonly>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="input-group">
+                            <select id="tokenSelect" class="form-select bg-dark text-white border-secondary">
+                                <option value="ETH" selected>ETH</option>
+                                <option value="USDT">USDT (ERC20)</option>
+                            </select>
+                            <input type="number" id="amount" class="form-control bg-dark text-white border-secondary"
+                                placeholder="Amount" step="0.001" value="0.01">
+                        </div>
+                    </div>
+                    <div class="col-md-12">
+                        <div class="form-check form-switch p-3 bg-dark bg-opacity-50 rounded border border-secondary">
+                            <input class="form-check-input" type="checkbox" id="isMultichain" checked>
+                            <label class="form-check-label text-info fw-bold" for="isMultichain">
+                                <i class="fas fa-project-diagram me-2"></i>Enable Multichain Bridge (BNB Chain)
+                            </label>
+                            <div class="text-muted small mt-1">User B will confirm and receive funds on the BNB Chain via our cross-chain relayer.</div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <button id="createBtn" class="btn btn-success w-100 py-2 fw-bold"><i
+                                class="fas fa-check-double me-2"></i>Create Escrow Contract</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
