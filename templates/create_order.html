@@ -6,17 +6,17 @@
 {% block content %}
 <div class="row">
     <div class="col-lg-8">
-        <div class="card bg-glass border-secondary shadow-sm mb-4">
-            <div class="card-header border-secondary bg-transparent d-flex align-items-center">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-transparent d-flex align-items-center py-3">
                 <i class="fas fa-file-invoice-dollar primary-text fs-4 me-2"></i>
-                <h5 class="mb-0 fw-bold">New Order Configuration</h5>
+                <h5 class="mb-0 fw-bold text-dark">New Order Configuration</h5>
             </div>
             <div class="card-body">
                 <form id="createOrderForm" onsubmit="event.preventDefault(); createSupplyChainOrder();">
                     
                     <div class="row mb-3">
                         <div class="col-md-12">
-                            <label class="form-label text-gray-300 fw-bold">Product / Order Description</label>
+                            <label class="form-label text-dark fw-bold">Product / Order Description</label>
                             <input type="text" class="form-control" id="productDesc" placeholder="e.g. 50x Industrial Sensors (Batch #1042)" required>
                         </div>
                     </div>
@@ -69,9 +69,9 @@
                             <small class="text-white-50 mt-1 d-block">Multichain relies on the Relayer to port the order to the BNB chain.</small>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label text-gray-300 fw-bold">Purchase Order (Optional Proof)</label>
+                            <label class="form-label text-dark fw-bold">Purchase Order (Optional Proof)</label>
                             <input class="form-control" type="file" id="poFileUpload">
-                            <small class="text-white-50 mt-1 d-block">Uploaded to IPFS. Becomes the first step in the audit trail.</small>
+                            <small class="text-muted mt-1 d-block">Uploaded to IPFS. Becomes the first step in the audit trail.</small>
                         </div>
                     </div>
 
@@ -88,23 +88,23 @@
     </div>
     
     <div class="col-lg-4">
-        <div class="card bg-glass border-secondary shadow-sm mb-4">
-            <div class="card-header border-secondary bg-transparent">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-transparent py-3">
                 <i class="fas fa-info-circle primary-text me-2"></i>
-                <h6 class="mb-0 fw-bold d-inline-block">Order Summary</h6>
+                <h6 class="mb-0 fw-bold d-inline-block text-dark">Order Summary</h6>
             </div>
             <div class="card-body">
                 <ul class="list-group list-group-flush bg-transparent">
-                    <li class="list-group-item bg-transparent text-white-50 d-flex justify-content-between align-items-center px-0">
+                    <li class="list-group-item bg-transparent text-secondary d-flex justify-content-between align-items-center px-0">
                         Total Cost
-                        <span class="text-white fw-bold fs-5" id="summaryCost">0.00 ETH</span>
+                        <span class="text-dark fw-bold fs-5" id="summaryCost">0.00 ETH</span>
                     </li>
-                    <li class="list-group-item bg-transparent text-white-50 d-flex justify-content-between align-items-center px-0">
+                    <li class="list-group-item bg-transparent text-secondary d-flex justify-content-between align-items-center px-0">
                         Network
-                        <span class="text-white fw-bold badge bg-secondary" id="summaryNetwork">Local ETH</span>
+                        <span class="text-white fw-bold badge bg-primary" id="summaryNetwork">Local ETH</span>
                     </li>
-                    <li class="list-group-item bg-transparent text-white-50 px-0 pb-0">
-                        <small>By initiating this order, your funds will be locked in the <strong>SupplyChainSource</strong> smart contract until the final Delivery Receipt is confirmed.</small>
+                    <li class="list-group-item bg-transparent text-muted px-0 pb-0 shadow-none border-0">
+                        <small>By initiating this order, your funds will be locked in the <strong>dBlock Escrow</strong> smart contract until the final Delivery Receipt is confirmed.</small>
                     </li>
                 </ul>
             </div>

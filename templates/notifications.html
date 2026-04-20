@@ -5,39 +5,39 @@
 
 {% block content %}
 <!-- Email Registration Card -->
-<div id="emailRegistrationCard" class="card bg-glass shadow-sm text-white mb-4" style="display: none;">
-    <div class="card-header bg-transparent border-bottom border-secondary">
-        <h5 class="mb-0 fw-bold"><i class="fas fa-envelope-open-text me-2"></i>Link Your Email Address</h5>
+<div id="emailRegistrationCard" class="card border-0 shadow-sm mb-4" style="display: none;">
+    <div class="card-header bg-transparent border-bottom">
+        <h5 class="mb-0 fw-bold text-dark"><i class="fas fa-envelope-open-text me-2"></i>Link Your Email Address</h5>
     </div>
     <div class="card-body text-center py-5">
-        <i class="fas fa-at fs-1 mb-3 text-info"></i>
-        <h4 class="fw-bold">Don't Miss Updates!</h4>
-        <p class="text-white-50 mb-4">You need an email registered to this wallet address to receive Escrow notifications.</p>
+        <i class="fas fa-at fs-1 mb-3 text-primary"></i>
+        <h4 class="fw-bold text-dark">Don't Miss Updates!</h4>
+        <p class="text-secondary mb-4">You need an email registered to this wallet address to receive Escrow notifications.</p>
         
         <div class="input-group mx-auto mb-2" style="max-width: 450px;">
-            <span class="input-group-text bg-dark border-secondary text-white-50"><i class="fas fa-user"></i></span>
-            <input type="text" id="userNameInput" class="form-control bg-dark text-white border-secondary" placeholder="Your Full Name (Optional)">
+            <span class="input-group-text bg-light border-light text-secondary"><i class="fas fa-user"></i></span>
+            <input type="text" id="userNameInput" class="form-control" placeholder="Your Full Name (Optional)">
         </div>
         <div class="input-group mx-auto" style="max-width: 450px;">
-            <span class="input-group-text bg-dark border-secondary text-white-50"><i class="fas fa-at"></i></span>
-            <input type="email" id="userEmailInput" class="form-control bg-dark text-white border-secondary" placeholder="Enter your email address...">
-            <button class="btn btn-info" onclick="saveEmail()">Link Account</button>
+            <span class="input-group-text bg-light border-light text-secondary"><i class="fas fa-at"></i></span>
+            <input type="email" id="userEmailInput" class="form-control" placeholder="Enter your email address...">
+            <button class="btn btn-primary" onclick="saveEmail()">Link Account</button>
         </div>
         <p id="emailErrorMsg" class="text-danger mt-3 fw-bold" style="display:none;"></p>
     </div>
 </div>
 
 <!-- Notifications Board -->
-<div id="notificationsContainer" class="card bg-glass shadow-sm text-white" style="display: none;">
-    <div class="card-header bg-transparent border-bottom border-secondary d-flex justify-content-between align-items-center">
-        <h5 class="mb-0 fw-bold"><i class="fas fa-bell me-2"></i>Recent Alerts</h5>
+<div id="notificationsContainer" class="card border-0 shadow-sm" style="display: none;">
+    <div class="card-header bg-transparent border-bottom d-flex justify-content-between align-items-center py-3">
+        <h5 class="mb-0 fw-bold text-dark"><i class="fas fa-bell me-2"></i>Recent Alerts</h5>
         <button class="btn btn-sm btn-outline-danger" onclick="clearNotifications()">Clear All</button>
     </div>
-    <div class="card-body">
+    <div class="card-body p-0">
         <div id="notifList" class="list-group list-group-flush">
             <!-- Populated by JS -->
         </div>
-        <p id="noNotifMsg" class="text-white-50 text-center my-4" style="display: none;">No new notifications for this wallet.</p>
+        <p id="noNotifMsg" class="text-muted text-center my-4 py-4" style="display: none;">No new notifications for this wallet.</p>
     </div>
 </div>
 
@@ -137,10 +137,10 @@
             } else {
                 msg.style.display = 'none';
                 notifs.forEach(n => {
-                    const item = `<div class="list-group-item bg-transparent text-white border-secondary d-flex justify-content-between align-items-center px-1">
+                    const item = `<div class="list-group-item bg-transparent text-dark d-flex justify-content-between align-items-center px-4 py-3 border-bottom">
                         <div>
                             <div class="fw-bold fs-6">${n.message}</div>
-                            <small class="text-info">${n.timestamp.replace('T', ' ').substring(0, 16)}</small>
+                            <small class="text-primary fw-bold">${n.timestamp.replace('T', ' ').substring(0, 16)}</small>
                         </div>
                     </div>`;
                     list.innerHTML += item;

@@ -21,23 +21,22 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
-<body class="bg-dark text-white">
+<body>
 
     <div class="d-flex" id="wrapper">
 
         <!-- Sidebar -->
         <div class="bg-glass border-end border-secondary" id="sidebar-wrapper">
-            <div class="sidebar-heading text-center py-4 fs-4 fw-bold font-outfit tracking-wide">
-                <i class="fas fa-link primary-text me-2"></i>dBlock <span class="text-white-50">Supplychain
-                    Escrow</span>
+            <div class="sidebar-heading text-center py-4 fs-4 fw-bold font-outfit tracking-wide border-bottom">
+                <i class="fas fa-link primary-text me-2"></i>dBlock <span class="text-secondary">Escrow</span>
             </div>
-            <div class="user-profile px-4 pb-3 mb-3 border-bottom border-secondary text-center" id="sidebarUserProfile">
+            <div class="user-profile px-4 pb-3 mb-3 border-bottom text-center" id="sidebarUserProfile">
                 <div class="avatar-circle mx-auto mb-2 bg-primary text-white d-flex align-items-center justify-content-center fw-bold fs-4"
                     style="height: 60px; width: 60px; border-radius: 50%;">
                     ?
                 </div>
-                <h6 class="mb-0 fw-bold user-name-display" id="navUserName">Not Logged In</h6>
-                <small class="text-white-50 user-role-badge badge rounded-pill mt-1" id="navUserRole">Guest</small>
+                <h6 class="mb-0 fw-bold user-name-display text-dark" id="navUserName">Not Logged In</h6>
+                <small class="text-muted user-role-badge badge bg-light border text-dark rounded-pill mt-1" id="navUserRole">Guest</small>
             </div>
 
             <div class="list-group list-group-flush my-3">
@@ -67,7 +66,7 @@
 
         <!-- Page Content -->
         <div id="page-content-wrapper">
-            <nav class="navbar navbar-expand-lg navbar-dark bg-transparent py-3 px-4 border-bottom border-secondary">
+            <nav class="navbar navbar-expand-lg navbar-light bg-white py-3 px-4 border-bottom shadow-sm">
                 <div class="d-flex align-items-center">
                     <i class="fas fa-align-left primary-text fs-4 me-3" id="menu-toggle" style="cursor: pointer;"></i>
                     <h2 class="fs-4 m-0 font-outfit">{% block page_title %}{% endblock %}</h2>
@@ -83,15 +82,15 @@
                     <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-center">
                         <li class="nav-item me-3">
                             <div class="d-flex align-items-center gap-2">
-                                <span class="badge bg-dark border border-secondary p-2 shadow-sm fs-6"
+                                <span class="badge bg-white border text-dark p-2 shadow-sm fs-6"
                                     title="Main Payout Currency (ETH)">
                                     <i class="fab fa-ethereum text-primary me-1"></i> <span
-                                        id="balanceDisplay">0.00</span> ETH
+                                        id="balanceDisplay" class="text-dark">0.00</span> ETH
                                 </span>
-                                <span class="badge bg-dark border border-secondary p-2 shadow-sm fs-6"
+                                <span class="badge bg-white border text-dark p-2 shadow-sm fs-6"
                                     title="USDT Balance">
                                     <i class="fas fa-dollar-sign text-success me-1"></i> <span
-                                        id="usdtBalance">0.00</span> USDT
+                                        id="usdtBalance" class="text-dark">0.00</span> USDT
                                 </span>
                             </div>
                         </li>
@@ -102,10 +101,10 @@
                                     <i class="fas fa-network-wired me-1"></i> <span id="activeChainLabel">ETH
                                         Source</span>
                                 </button>
-                                <ul class="dropdown-menu dropdown-menu-end bg-dark border-secondary shadow-lg">
-                                    <li><a class="dropdown-item text-white" href="#"
+                                <ul class="dropdown-menu dropdown-menu-end bg-white border-light shadow-lg">
+                                    <li><a class="dropdown-item text-dark" href="#"
                                             onclick="changeChain('ETH')">Ethereum (Source)</a></li>
-                                    <li><a class="dropdown-item text-white" href="#" onclick="changeChain('BNB')">BSC
+                                    <li><a class="dropdown-item text-dark" href="#" onclick="changeChain('BNB')">BSC
                                             Mirror</a></li>
                                 </ul>
                             </div>
@@ -113,18 +112,18 @@
                         <li class="nav-item">
                             <div class="dropdown">
                                 <button
-                                    class="btn btn-outline-secondary dropdown-toggle bg-glass shadow-sm border-secondary d-flex align-items-center gap-2"
+                                    class="btn btn-white shadow-sm border d-flex align-items-center gap-2 text-dark fw-bold"
                                     type="button" id="accountDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                                     <div class="header-avatar bg-primary rounded-circle"
                                         style="width: 25px; height: 25px;"></div>
-                                    <span id="currentAccountHeader" class="fw-bold font-monospace">0x...</span>
+                                    <span id="currentAccountHeader" class="font-monospace">0x...</span>
                                 </button>
-                                <ul class="dropdown-menu dropdown-menu-end bg-dark border-secondary shadow-lg z-3 position-absolute"
+                                <ul class="dropdown-menu dropdown-menu-end bg-white border-light shadow-lg z-3 position-absolute"
                                     aria-labelledby="accountDropdown">
                                     <li>
-                                        <h6 class="dropdown-header text-white-50 user-name-display">Active Account</h6>
+                                        <h6 class="dropdown-header text-muted user-name-display">Active Account</h6>
                                     </li>
-                                    <li><a class="dropdown-item text-white account-item font-monospace small active"
+                                    <li><a class="dropdown-item text-dark account-item font-monospace small active"
                                             href="#">
                                             <i class="fas fa-wallet text-success me-2"></i><span
                                                 id="dropdownAccountFull">0x...</span>

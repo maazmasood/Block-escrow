@@ -6,33 +6,33 @@
 {% block content %}
 <div class="row justify-content-center my-5">
     <div class="col-md-6 col-lg-5">
-        <div class="card bg-glass shadow-lg text-white border border-secondary">
-            <div class="card-header bg-transparent border-bottom border-secondary text-center py-4">
-                <i class="fas fa-user-plus fs-1 primary-text mb-3"></i>
+        <div class="card border-0 shadow-lg">
+            <div class="card-header bg-success text-white text-center py-5">
+                <i class="fas fa-user-plus fs-1 mb-3"></i>
                 <h4 class="mb-0 fw-bold">Register Account</h4>
-                <p class="text-white-50 small mb-0 mt-2">Set up your Supply Chain profile on the blockchain.</p>
+                <p class="text-white-50 small mb-0 mt-2 tracking-wide text-uppercase">Create your Secure Identity</p>
             </div>
             
-            <div class="card-body p-4">
+            <div class="card-body p-5">
                 <form id="registerForm" onsubmit="event.preventDefault(); handleRegister();">
                     <div class="mb-4">
-                        <label class="form-label text-gray-300 fw-bold">Private Key</label>
+                        <label class="form-label text-dark fw-bold">Private Key</label>
                         <div class="input-group">
-                            <span class="input-group-text bg-dark border-secondary text-white-50"><i class="fas fa-lock"></i></span>
-                            <input type="password" id="pkInput" class="form-control bg-dark text-white border-secondary" placeholder="0x..." required>
+                            <span class="input-group-text bg-light border-light text-secondary"><i class="fas fa-key"></i></span>
+                            <input type="password" id="pkInput" class="form-control" placeholder="0x..." required>
                         </div>
-                        <small class="text-muted d-block mt-1">Used locally to derive your wallet and sign actions.</small>
+                        <small class="text-muted d-block mt-2">Derive your secure wallet address locally.</small>
                     </div>
 
                     <div class="mb-4">
-                        <label class="form-label text-gray-300 fw-bold">Profile Details</label>
+                        <label class="form-label text-dark fw-bold">Profile Details</label>
                         <div class="input-group mb-2">
-                            <span class="input-group-text bg-dark border-secondary text-white-50"><i class="fas fa-user"></i></span>
-                            <input type="text" id="usernameInput" class="form-control bg-dark text-white border-secondary" placeholder="Organization / Full Name" required>
+                            <span class="input-group-text bg-light border-light text-secondary"><i class="fas fa-user"></i></span>
+                            <input type="text" id="usernameInput" class="form-control" placeholder="Organization / Full Name" required>
                         </div>
                         <div class="input-group">
-                            <span class="input-group-text bg-dark border-secondary text-white-50"><i class="fas fa-user-tag"></i></span>
-                            <select id="roleInput" class="form-select bg-dark text-white border-secondary" required>
+                            <span class="input-group-text bg-light border-light text-secondary"><i class="fas fa-user-tag"></i></span>
+                            <select id="roleInput" class="form-select" required>
                                 <option value="" disabled selected>Select Your Role</option>
                                 <option value="buyer">Buyer (Procurement)</option>
                                 <option value="seller">Seller (Supplier)</option>
@@ -53,8 +53,8 @@
                     <div id="registerError" class="alert alert-danger mt-3 d-none p-2 small text-center"></div>
                 </form>
             </div>
-            <div class="card-footer bg-transparent border-top border-secondary text-center py-3">
-                <small class="text-white-50"><i class="fas fa-shield-alt me-1"></i> Data stored locally + Blockchain identity</small>
+            <div class="card-footer bg-light border-top text-center py-3">
+                <small class="text-muted"><i class="fas fa-shield-alt me-1"></i> Data stored locally + Blockchain identity</small>
             </div>
         </div>
     </div>

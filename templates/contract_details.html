@@ -7,9 +7,9 @@
 <div class="row" id="orderViewContainer" style="display: none;">
     <!-- Tracker Visual -->
     <div class="col-lg-7">
-        <div class="card bg-glass border-secondary shadow-sm mb-4 h-100">
-            <div class="card-header border-secondary bg-transparent d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold">Timeline Lifecycle</h5>
+        <div class="card border-0 shadow-sm mb-4 h-100">
+            <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-4 border-bottom">
+                <h5 class="mb-0 fw-bold text-dark">Timeline Lifecycle</h5>
                 <span id="orderStatusBadge" class="status-badge status-Created">● Loading</span>
             </div>
             
@@ -23,30 +23,30 @@
     
     <!-- Actions and Summary -->
     <div class="col-lg-5">
-        <div class="card bg-glass border-secondary shadow-sm mb-4">
-            <div class="card-header border-secondary bg-transparent d-flex align-items-center">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-transparent d-flex align-items-center py-3">
                 <i class="fas fa-boxes primary-text fs-5 me-2"></i>
-                <h6 class="mb-0 fw-bold">Order Details #<span id="detailOnchainId"></span></h6>
+                <h6 class="mb-0 fw-bold text-dark">Order Details #<span id="detailOnchainId"></span></h6>
             </div>
             <div class="card-body">
-                <div class="mb-3 border-bottom border-secondary pb-3">
-                    <p class="text-white-50 mb-1 small text-uppercase fw-bold">Product / Cargo</p>
-                    <p class="mb-0 fw-bold fs-5" id="detailProduct">...</p>
+                <div class="mb-3 border-bottom pb-3">
+                    <p class="text-secondary mb-1 small text-uppercase fw-bold">Product / Cargo</p>
+                    <p class="mb-0 fw-bold fs-5 text-dark" id="detailProduct">...</p>
                     <p class="text-primary fw-bold mt-1 mb-0 fs-5"><span id="detailAmount">0</span> <span id="detailToken">ETH</span></p>
                 </div>
                 
-                <div class="mb-3 border-bottom border-secondary pb-3">
+                <div class="mb-3 border-bottom pb-3">
                     <div class="d-flex justify-content-between mb-2">
-                        <span class="text-white-50 small">Buyer</span>
-                        <span class="font-monospace small" id="detailBuyer">...</span>
+                        <span class="text-secondary small">Buyer</span>
+                        <span class="font-monospace small text-dark" id="detailBuyer">...</span>
                     </div>
                     <div class="d-flex justify-content-between mb-2">
-                        <span class="text-white-50 small">Seller</span>
-                        <span class="font-monospace small" id="detailSeller">...</span>
+                        <span class="text-secondary small">Seller</span>
+                        <span class="font-monospace small text-dark" id="detailSeller">...</span>
                     </div>
                     <div class="d-flex justify-content-between">
-                        <span class="text-white-50 small">Agent</span>
-                        <span class="font-monospace small text-warning" id="detailAgent">...</span>
+                        <span class="text-secondary small">Agent</span>
+                        <span class="font-monospace small text-warning fw-bold" id="detailAgent">...</span>
                     </div>
                 </div>
 
@@ -60,19 +60,19 @@
         </div>
 
         <!-- Action Panel (Contextual) -->
-        <div class="card bg-glass border-primary shadow-sm mb-4 d-none" id="actionPanelBox">
-            <div class="card-header border-primary bg-transparent text-primary fw-bold">
+        <div class="card border-0 shadow-sm mb-4 d-none" id="actionPanelBox" style="border-left: 5px solid var(--primary-color) !important;">
+            <div class="card-header bg-transparent text-primary fw-bold py-3">
                 <i class="fas fa-exclamation-circle me-1"></i> Required Action
             </div>
             <div class="card-body p-4">
-                <p class="mb-3" id="actionText">You have a pending action to complete the next stage.</p>
+                <p class="mb-3 text-dark fw-bold" id="actionText">You have a pending action to complete the next stage.</p>
                 
                 <div id="proofUploadSection">
-                    <label class="form-label text-gray-300 small fw-bold">Upload Stage Proof (Photo/Doc)</label>
-                    <input class="form-control form-control-sm mb-3" type="file" id="actionProofFile">
+                    <label class="form-label text-dark small fw-bold">Upload Stage Proof (Photo/Doc)</label>
+                    <input class="form-control form-control-sm mb-3 shadow-none" type="file" id="actionProofFile">
                 </div>
                 
-                <button class="btn btn-primary w-100 fw-bold" id="actionBtn" onclick="executeNextStage()">
+                <button class="btn btn-primary w-100 fw-bold shadow-none" id="actionBtn" onclick="executeNextStage()">
                     Execute Action <i class="fas fa-arrow-right ms-1"></i>
                 </button>
 
@@ -110,26 +110,26 @@
 <!-- Modal for image/doc preview -->
 <div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
-    <div class="modal-content bg-dark border-secondary text-white">
-      <div class="modal-header border-secondary">
-        <h5 class="modal-title font-outfit" id="previewModalTitle">Document View</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+    <div class="modal-content bg-white border-0 shadow-lg">
+      <div class="modal-header border-bottom">
+        <h5 class="modal-title font-outfit text-dark fw-bold" id="previewModalTitle">Document View</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body p-0">
-          <div class="text-center bg-black">
+          <div class="text-center bg-light">
             <img id="previewModalImage" src="" alt="Proof" class="img-fluid" style="object-fit: contain; max-height: 60vh; width: 100%;">
           </div>
           <!-- Admin Only OCR Section -->
-          <div id="ocrSection" class="p-3 bg-dark border-top border-secondary d-none">
-              <h6 class="text-info fw-bold mb-2"><i class="fas fa-search me-1"></i>AI Audit Recognition (Admin Only)</h6>
-              <div id="ocrContent" class="small text-white-50" style="white-space: pre-line;">
+          <div id="ocrSection" class="p-4 bg-white border-top d-none">
+              <h6 class="text-primary fw-bold mb-2"><i class="fas fa-search me-1"></i>AI Audit Recognition (Admin Only)</h6>
+              <div id="ocrContent" class="small text-dark" style="white-space: pre-line; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
                   Analyzing document...
               </div>
           </div>
       </div>
-      <div class="modal-footer border-secondary justify-content-between">
-          <span class="font-monospace small text-primary" id="previewModalHash">IPFS: ...</span>
-          <a id="previewModalDownload" href="#" target="_blank" class="btn btn-sm btn-outline-light"><i class="fas fa-external-link-alt me-1"></i>Open in Gateway</a>
+      <div class="modal-footer border-top justify-content-between">
+          <span class="font-monospace small text-muted" id="previewModalHash">IPFS: ...</span>
+          <a id="previewModalDownload" href="#" target="_blank" class="btn btn-sm btn-primary"><i class="fas fa-external-link-alt me-1"></i>Open in Gateway</a>
       </div>
     </div>
   </div>

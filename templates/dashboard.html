@@ -8,16 +8,16 @@
 <div class="row mb-5">
     <!-- Active Orders -->
     <div class="col-md-6 mb-4 mb-md-0">
-        <div class="card h-100 bg-glass border-secondary shadow-sm">
+        <div class="card h-100 shadow-sm border-0">
             <div class="card-body p-4 d-flex align-items-center">
-                <div class="text-white p-3 rounded-circle"
-                    style="background: rgba(14, 165, 233, 0.15); border: 1px solid rgba(14, 165, 233, 0.3);">
-                    <i class="fas fa-boxes fs-2" style="color: #0ea5e9;"></i>
+                <div class="p-3 rounded-circle"
+                    style="background: #eff6ff; border: 1px solid #bfdbfe;">
+                    <i class="fas fa-boxes fs-2" style="color: #2563eb;"></i>
                 </div>
                 <div class="ms-4">
-                    <p class="text-white-50 mb-1 fw-bold text-uppercase"
+                    <p class="text-secondary mb-1 fw-bold text-uppercase"
                         style="letter-spacing: 0.05em; font-size: 0.8rem;">Active Orders</p>
-                    <h3 class="mb-0 fw-bold">{{ active_count }}</h3>
+                    <h3 class="mb-0 fw-bold text-dark">{{ active_count }}</h3>
                 </div>
             </div>
         </div>
@@ -25,16 +25,16 @@
 
     <!-- Completed Deliveries -->
     <div class="col-md-6 mb-4 mb-md-0">
-        <div class="card h-100 bg-glass border-secondary shadow-sm">
+        <div class="card h-100 shadow-sm border-0">
             <div class="card-body p-4 d-flex align-items-center">
-                <div class="text-white p-3 rounded-circle"
-                    style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3);">
-                    <i class="fas fa-check-double fs-2" style="color: #10b981;"></i>
+                <div class="p-3 rounded-circle"
+                    style="background: #ecfdf5; border: 1px solid #d1fae5;">
+                    <i class="fas fa-check-double fs-2" style="color: #059669;"></i>
                 </div>
                 <div class="ms-4">
-                    <p class="text-white-50 mb-1 fw-bold text-uppercase"
+                    <p class="text-secondary mb-1 fw-bold text-uppercase"
                         style="letter-spacing: 0.05em; font-size: 0.8rem;">Completed</p>
-                    <h3 class="mb-0 fw-bold">{{ completed_count }}</h3>
+                    <h3 class="mb-0 fw-bold text-dark">{{ completed_count }}</h3>
                 </div>
             </div>
         </div>
@@ -46,18 +46,18 @@
 <div class="row">
     <!-- Active Role Context Panel -->
     <div class="col-lg-12 mb-4">
-        <div class="card bg-glass border-primary shadow-sm">
+        <div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);">
             <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <div>
-                    <h5 class="mb-1 fw-bold">Welcome back, <span id="dashUserName">User</span></h5>
-                    <p class="text-white-50 mb-0">Role: <span id="dashUserRole"
-                            class="badge bg-primary text-uppercase tracking-wide px-2 py-1">Guest</span></p>
+                    <h5 class="mb-1 fw-bold text-dark">Welcome back, <span id="dashUserName">User</span></h5>
+                    <p class="text-secondary mb-0">Role: <span id="dashUserRole"
+                            class="badge bg-primary text-uppercase tracking-wide px-3 py-2">Guest</span></p>
                 </div>
                 <div id="dashActionBtnArea">
                     <a href="/create_order" class="btn btn-primary fw-bold dashboard-buyer-only"
                         style="display:none;"><i class="fas fa-plus me-2"></i>New Order Request</a>
                     <a href="/orders" class="btn btn-success fw-bold dashboard-seller-only border-0"
-                        style="display:none; background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.5) !important;"><i
+                        style="display:none; background: #059669; color: white;"><i
                             class="fas fa-list me-2"></i>View Fulfillment Queue</a>
                 </div>
             </div>
@@ -68,15 +68,15 @@
 <!-- List of User's Orders -->
 <div class="row">
     <div class="col-12">
-        <div class="card bg-glass border-secondary shadow-sm">
+        <div class="card border-0 shadow-sm">
             <div
-                class="card-header border-secondary bg-transparent py-3 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold"><i class="fas fa-clipboard-list primary-text me-2"></i>My Active Orders</h5>
-                <a href="/orders" class="btn btn-sm btn-outline-secondary">View All</a>
+                class="card-header bg-transparent py-4 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold text-dark"><i class="fas fa-clipboard-list primary-text me-2"></i>My Active Orders</h5>
+                <a href="/orders" class="btn btn-sm btn-outline-primary">View All</a>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-dark table-hover mb-0 align-middle">
+                    <table class="table table-hover mb-0 align-middle">
                         <thead>
                             <tr>
                                 <th class="ps-4">ID</th>
@@ -88,7 +88,7 @@
                         </thead>
                         <tbody id="dashboardOrderTable">
                             <tr>
-                                <td colspan="5" class="text-center py-4 text-white-50">Loading orders...</td>
+                                <td colspan="5" class="text-center py-4 text-muted">Loading orders...</td>
                             </tr>
                         </tbody>
                     </table>
