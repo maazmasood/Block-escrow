@@ -19,12 +19,12 @@ async function main() {
   const usdtAddr = await usdtEth.getAddress();
   console.log("MockUSDT (ETH) Deployed:", usdtAddr);
 
-  // 2. Deploy EscrowSource
-  const EscrowSource = await hre.ethers.getContractFactory("EscrowSource");
-  const source = await EscrowSource.deploy(usdtAddr);
+  // 2. Deploy SupplyChainSource
+  const SupplyChainSource = await hre.ethers.getContractFactory("SupplyChainSource");
+  const source = await SupplyChainSource.deploy();
   await source.waitForDeployment();
   const sourceAddr = await source.getAddress();
-  console.log("EscrowSource (ETH) Deployed:", sourceAddr);
+  console.log("SupplyChainSource (ETH) Deployed:", sourceAddr);
 
   // Update Config
   const configPath = path.join(__dirname, "../static/contract/multichain_config.json");

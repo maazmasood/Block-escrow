@@ -1,63 +1,98 @@
 {% extends "layout.html" %}
 
-{% block title %}Transactions{% endblock %}
-{% block page_title %}Transaction History{% endblock %}
+{% block title %}All Orders{% endblock %}
+{% block page_title %}Supply Chain Orders Registry{% endblock %}
 
 {% block content %}
-<div class="card bg-glass shadow-sm text-white">
-    <div
-        class="card-header bg-transparent border-bottom border-secondary d-flex justify-content-between align-items-center">
-        <h5 class="mb-0 fw-bold"><i class="fas fa-list me-2"></i>All Escrows</h5>
-        <button class="btn btn-sm btn-danger" onclick="clearTransactions()">Clear History</button>
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="form-control bg-glass border-secondary text-white d-flex align-items-center gap-3 w-100 p-2">
+            <i class="fas fa-search text-white-50 ms-2"></i>
+            <input type="text" class="bg-transparent border-0 text-white w-100 outline-none" style="outline:none;" id="searchOrdersInput" placeholder="Search by Product Description or Address...">
+        </div>
     </div>
-    <div class="card-body table-responsive">
-        {% if escrows %}
-        <table class="table table-dark table-hover table-borderless align-middle">
-            <thead class="table-secondary">
-                <tr>
-                    <th>ID</th>
-                    <th>Buyer</th>
-                    <th>Seller</th>
-                    <th>Amount (ETH)</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for escrow in escrows %}
-                <tr>
-                    <td>#{{ escrow.id }}</td>
-                    <td title="{{ escrow.buyer_address }}">{{ escrow.buyer_address[:10] }}...</td>
-                    <td title="{{ escrow.seller_address }}">{{ escrow.seller_address[:10] }}...</td>
-                    <td>{{ escrow.amount_eth }}</td>
-                    <td><span class="badge bg-{{ 'success' if escrow.status == 'Released' else 'warning' }}">{{
-                            escrow.status }}</span></td>
-                    <td>{{ escrow.created_at.strftime('%Y-%m-%d') }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p class="text-muted text-center my-4">No transactions found.</p>
-        {% endif %}
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card bg-glass border-secondary shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover mb-0 align-middle" id="registryTable">
+                        <thead>
+                            <tr>
+                                <th class="ps-4">On-Chain ID</th>
+                                <th>Product / Description</th>
+                                <th>Buyer Address</th>
+                                <th>Seller Address</th>
+                                <th>Amount</th>
+                                <th>Network</th>
+                                <th>Status</th>
+                                <th class="text-end pe-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for e in escrows %}
+                            <tr class="order-row">
+                                <td class="ps-4 font-monospace text-white-50">#{{ e.order_id_onchain }}</td>
+                                <td class="fw-bold product-desc">{{ e.product_description }}</td>
+                                <td class="font-monospace small buyer-addr" title="{{ e.buyer_address }}">{{ e.buyer_address[:6] }}...{{ e.buyer_address[-4:] }}</td>
+                                <td class="font-monospace small seller-addr" title="{{ e.seller_address }}">{{ e.seller_address[:6] }}...{{ e.seller_address[-4:] }}</td>
+                                <td class="text-primary fw-bold">{{ e.amount }} <span class="fs-6 text-white-50">{{ e.token_symbol }}</span></td>
+                                <td>
+                                    {% if e.is_multichain %}
+                                        <span class="badge bg-secondary"><i class="fas fa-link me-1"></i> Multichain</span>
+                                    {% else %}
+                                        <span class="badge border border-secondary text-white-50"><i class="fab fa-ethereum me-1"></i> Single ETH</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="status-badge status-{{ e.status }}">{{ e.status }}</span>
+                                </td>
+                                <td class="text-end pe-4">
+                                    <a href="#" onclick="viewOrderTracking('{{ e.id }}'); return false;" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye"></i> Track
+                                    </a>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center py-5 text-white-50 border-bottom-0">
+                                    <i class="fas fa-folder-open fs-2 mb-3 d-block"></i>
+                                    No records found in the Supply Chain Registry.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
 <script>
-    async function clearTransactions() {
-        if (!confirm("Are you sure you want to clear all transaction history?")) return;
-
-        try {
-            const res = await fetch('/api/transactions/clear', { method: 'POST' });
-            if (res.ok) {
-                location.reload();
+    // Just a tiny bit of inline JS to allow search to work simply
+    document.getElementById('searchOrdersInput').addEventListener('keyup', function() {
+        const term = this.value.toLowerCase();
+        document.querySelectorAll('.order-row').forEach(row => {
+            const desc = row.querySelector('.product-desc').innerText.toLowerCase();
+            const b = row.querySelector('.buyer-addr').innerText.toLowerCase();
+            const s = row.querySelector('.seller-addr').innerText.toLowerCase();
+            if (desc.includes(term) || b.includes(term) || s.includes(term)) {
+                row.style.display = '';
             } else {
-                alert("Failed to clear transactions.");
+                row.style.display = 'none';
             }
-        } catch (e) {
-            console.error(e);
-            alert("Error connecting to server.");
-        }
+        });
+    });
+
+    function viewOrderTracking(dbId) {
+        // We trigger showing the tracking info. Since that logic is in script.js,
+        // and we are on a different page, we might navigate if needed, but since
+        // the user wants timeline tracking, let's redirect them.
+        localStorage.setItem('viewOrderTarget', dbId);
+        window.location.href = '/order_tracking';
     }
 </script>
 {% endblock %}

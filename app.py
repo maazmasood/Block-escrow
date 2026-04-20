@@ -4,12 +4,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, redirect
 from flask_cors import CORS
 import requests
 from database import db
-from models import Escrow, AuditLog, Notification, AISummary, User
+from models import Order, AuditLog, Notification, AISummary, User, OrderDocument
 from datetime import datetime, timedelta
+from web3 import Web3
+import json
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///fyp.db'
@@ -50,30 +52,130 @@ def send_email(to_email, subject, body):
         app.logger.error(f"Failed to send email to {to_email}: {e}")
         return False
 
+def push_notification(user_address, message, subject="dBlock Escrow Alert"):
+    """Saves a notification to the database and sends an email if the user has one registered."""
+    try:
+        user_address = user_address.lower()
+        # 1. Save to DB
+        notif = Notification(user_address=user_address, message=message)
+        db.session.add(notif)
+        db.session.commit()
+        
+        # 2. Check for Email
+        user = db.session.get(User, user_address)
+        if user and user.email:
+            email_body = f"""
+            Hello {user.name},
+            
+            You have a new update regarding your Supply Chain order:
+            
+            {message}
+            
+            View details on your dashboard: http://127.0.0.1:5000/dashboard
+            
+            Best regards,
+            dBlock Escrow Audit Engine
+            """
+            send_email(user.email, subject, email_body)
+        return True
+    except Exception as e:
+        app.logger.error(f"Error in push_notification: {e}")
+        return False
+
+def promote_to_onchain_admin(user_address):
+    """Automatically whitelists an admin address on both ETH and BNB blockchains."""
+    deployer_key = os.environ.get("DEPLOYER_PRIVATE_KEY")
+    if not deployer_key:
+        app.logger.error("DEPLOYER_PRIVATE_KEY is missing. Cannot promote admin on-chain.")
+        return False
+
+    # Load Config
+    try:
+        config_path = os.path.join(app.root_path, 'static', 'contract', 'multichain_config.json')
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+    except Exception as e:
+        app.logger.error(f"Failed to load multichain config: {e}")
+        return False
+
+    # Minimal ABI for setAdminStatus
+    abi = [{
+        "inputs": [
+            {"internalType": "address", "name": "_admin", "type": "address"},
+            {"internalType": "bool", "name": "_status", "type": "bool"}
+        ],
+        "name": "setAdminStatus",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    }]
+
+    promoted_any = False
+    
+    # Chains to update
+    networks = [
+        {"url": "http://127.0.0.1:8545", "contract": config.get('ETH_SOURCE'), "name": "ETH"},
+        {"url": "http://127.0.0.1:8546", "contract": config.get('BNB_MIRROR'), "name": "BNB"}
+    ]
+
+    for net in networks:
+        if not net['contract']: continue
+        try:
+            w3 = Web3(Web3.HTTPProvider(net['url']))
+            account = w3.eth.account.from_key(deployer_key)
+            contract = w3.eth.contract(address=w3.to_checksum_address(net['contract']), abi=abi)
+            
+            nonce = w3.eth.get_transaction_count(account.address)
+            tx = contract.functions.setAdminStatus(w3.to_checksum_address(user_address), True).build_transaction({
+                'from': account.address,
+                'nonce': nonce,
+                'gas': 100000,
+                'gasPrice': w3.eth.gas_price
+            })
+            
+            signed_tx = w3.eth.account.sign_transaction(tx, deployer_key)
+            tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+            app.logger.info(f"Promoted {user_address} to admin on {net['name']}. TX: {w3.to_hex(tx_hash)}")
+            promoted_any = True
+        except Exception as e:
+            app.logger.error(f"Failed to promote admin on {net['name']}: {e}")
+
+    return promoted_any
+
 # --- Local IPFS Configuration ---
-# The default IPFS API endpoint (Kubo/go-ipfs)
 LOCAL_IPFS_API_URL = "http://127.0.0.1:5001/api/v0/add"
+
+# --- Frontend Routes ---
+
+@app.route('/login')
+def login():
+    return render_template('login.html')
+
+@app.route('/register')
+def register():
+    return render_template('register.html')
 
 @app.route('/')
 def dashboard():
-    # Fetch summary stats
-    total_volume = db.session.query(db.func.sum(Escrow.amount)).scalar() or 0
-    active_count = Escrow.query.filter(Escrow.status != 'Released').count()
-    completed_count = Escrow.query.filter_by(status='Released').count()
+    total_volume = db.session.query(db.func.sum(Order.amount)).scalar() or 0
+    active_count = Order.query.filter(Order.status != 'Completed').count()
+    completed_count = Order.query.filter_by(status='Completed').count()
     return render_template('dashboard.html', total_eth=total_volume, active_count=active_count, completed_count=completed_count)
 
-@app.route('/create_contract')
-def create_contract():
-    return render_template('create_contract.html')
+@app.route('/create_order')
+def create_order():
+    sellers = User.query.filter_by(role='seller').all()
+    agents = User.query.filter_by(role='agent').all()
+    return render_template('create_order.html', sellers=sellers, agents=agents)
 
-@app.route('/contract_details')
-def contract_details():
+@app.route('/order_tracking')
+def order_tracking():
     return render_template('contract_details.html')
 
-@app.route('/transactions')
-def transactions():
-    escrows = Escrow.query.order_by(Escrow.created_at.desc()).all()
-    return render_template('transactions.html', escrows=escrows)
+@app.route('/orders')
+def orders():
+    all_orders = Order.query.order_by(Order.created_at.desc()).all()
+    return render_template('transactions.html', escrows=all_orders)
 
 @app.route('/audits')
 def audits():
@@ -83,20 +185,35 @@ def audits():
 
 @app.route('/notifications')
 def notifications():
-    # In a real app, filter by logged-in user. Here, show all for demo.
     notifications = Notification.query.order_by(Notification.timestamp.desc()).all()
     return render_template('notifications.html', notifications=notifications)
 
-# --- API Endpoints ---
+# --- API Endpoints: Auth ---
 
-@app.route('/api/notifications', methods=['GET'])
-def get_notifications():
-    notifs = Notification.query.order_by(Notification.timestamp.desc()).limit(5).all()
-    return jsonify([n.to_dict() for n in notifs])
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login():
+    data = request.json
+    address = data.get('address')
+    
+    if not address:
+        return jsonify({"error": "Address is required"}), 400
+
+    address = address.lower()
+    user = db.session.get(User, address)
+    if not user:
+        return jsonify({"error": "User not registered. Please sign up first."}), 404
+        
+    return jsonify({"message": "Logged in", "user": user.to_dict()}), 200
+
+@app.route('/api/user/email/<address>', methods=['GET'])
+def get_user_email(address):
+    user = db.session.get(User, address.lower())
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    return jsonify({"email": user.email, "name": user.name}), 200
 
 @app.route('/api/user/email', methods=['POST'])
-def save_user_email():
-    """Register or update an email address and name for a given wallet address."""
+def update_user_email():
     data = request.json
     address = data.get('address')
     email = data.get('email')
@@ -105,125 +222,214 @@ def save_user_email():
     if not address or not email:
         return jsonify({"error": "Address and email are required"}), 400
         
-    user = db.session.get(User, address)
-    if user:
-        user.email = email
-        if name:
-            user.name = name
-    else:
-        user = User(wallet_address=address, email=email, name=name)
-        db.session.add(user)
+    user = db.session.get(User, address.lower())
+    if not user:
+        return jsonify({"error": "User not found"}), 404
         
+    user.email = email
+    if name:
+        user.name = name
     db.session.commit()
-    return jsonify({"message": "Profile saved completely", "user": user.to_dict()}), 200
+    return jsonify({"message": "Profile updated", "email": user.email}), 200
 
-@app.route('/api/user/email/<address>', methods=['GET'])
-def get_user_email(address):
-    """Fetch profile data stored for a given wallet address."""
-    user = db.session.get(User, address)
-    if user:
-        return jsonify({"email": user.email, "name": user.name}), 200
-    return jsonify({"email": None, "name": None}), 200
-
-@app.route('/api/users/mapping', methods=['GET'])
-def get_users_mapping():
-    """Return a dictionary mapping wallet addresses to user names."""
-    users = User.query.all()
-    mapping = {u.wallet_address: u.name for u in users if u.name}
-    return jsonify(mapping), 200
-
-@app.route('/api/escrow/create', methods=['POST'])
-def create_escrow_log():
+@app.route('/api/auth/register', methods=['POST'])
+def auth_register():
     data = request.json
-    new_escrow = Escrow(
-        contract_address=data.get('contractAddress'), # New field
-        buyer_address=data.get('buyer'),
-        seller_address=data.get('receiver'),
-        agent_address=data.get('agent'),
+    address = data.get('address')
+    name = data.get('name')
+    role = data.get('role')
+    
+    if not address or not name or not role:
+        return jsonify({"error": "Address, name and role are required"}), 400
+
+    address = address.lower()
+    existing = db.session.get(User, address)
+    if existing:
+        return jsonify({"error": "User already registered"}), 409
+        
+    user = User(wallet_address=address, name=name, role=role, email="")
+    db.session.add(user)
+    db.session.commit()
+    
+    # If registering as admin, promote on-chain
+    if role == 'admin':
+        from threading import Thread
+        Thread(target=promote_to_onchain_admin, args=(address,)).start()
+    
+    return jsonify({"message": "Account created successfully", "user": user.to_dict()}), 201
+
+@app.route('/api/users/<role>', methods=['GET'])
+def get_users_by_role(role):
+    users = User.query.filter_by(role=role).all()
+    return jsonify([u.to_dict() for u in users]), 200
+
+# --- API Endpoints: Orders ---
+
+@app.route('/api/order/create', methods=['POST'])
+def create_order_log():
+    data = request.json
+    new_order = Order(
+        contract_address=data.get('contractAddress'),
+        order_id_onchain=data.get('orderIdOnchain'),
+        buyer_address=data.get('buyer', '').lower(),
+        seller_address=data.get('seller', '').lower(),
+        agent_address=data.get('agent', '').lower(),
         amount=float(data.get('amount')),
         token_symbol=data.get('token', 'ETH'),
-        ipfs_hash=data.get('ipfsHash'),
-        status='Created',
         is_multichain=data.get('isMultichain', False),
-        source_chain_id=data.get('sourceChain', '8545'),
-        dest_chain_id=data.get('destChain', '8546'),
-        mirror_contract_address=data.get('mirrorAddress')
+        mirror_address=data.get('mirrorAddress'),
+        product_description=data.get('productDescription', 'Supply Chain Order'),
+        status='Created'
     )
-    db.session.add(new_escrow)
+    db.session.add(new_order)
     db.session.commit()
     
-    # Log Audit
-    log = AuditLog(escrow_id=new_escrow.id, event_type="Creation", description=f"Escrow created by {new_escrow.buyer_address} for {new_escrow.amount} {new_escrow.token_symbol} at {new_escrow.contract_address}")
+    # Store initial generic receipt/PO hash if passed
+    ipfs_hash = data.get('ipfsHash')
+    if ipfs_hash:
+        doc = OrderDocument(order_id=new_order.id, stage='Created', ipfs_hash=ipfs_hash, doc_type='receipt', uploaded_by=new_order.buyer_address)
+        db.session.add(doc)
+    
+    log = AuditLog(order_id=new_order.id, event_type="OrderCreated", description=f"Order #{new_order.order_id_onchain} created by buyer.", to_status="Created")
     db.session.add(log)
     
-    # Notify Agent
-    notif = Notification(user_address=new_escrow.agent_address, message=f"New Escrow Request: {new_escrow.amount} {new_escrow.token_symbol} from {new_escrow.buyer_address}")
-    db.session.add(notif)
+    # 3. Notify Seller
+    push_notification(
+        new_order.seller_address, 
+        f"New Order Request: {new_order.amount} {new_order.token_symbol} for {new_order.product_description}",
+        "New dBlock Escrow Order"
+    )
     
     db.session.commit()
     
-    return jsonify({"message": "Escrow logged", "id": new_escrow.id}), 201
+    # Trigger OCR if it is a receipt (PO)
+    if ipfs_hash:
+        from threading import Thread
+        Thread(target=process_document_ocr, args=(doc.id,)).start()
+        
+    return jsonify({"message": "Order logged", "id": new_order.id}), 201
 
-@app.route('/api/contracts/<user_address>', methods=['GET'])
-def get_user_contracts(user_address):
-    # Fetch contracts where the user is a participant
-    contracts = Escrow.query.filter(
-        (Escrow.buyer_address == user_address) | 
-        (Escrow.seller_address == user_address) | 
-        (Escrow.agent_address == user_address)
-    ).order_by(Escrow.created_at.desc()).all()
-    
-    return jsonify([c.to_dict() for c in contracts]), 200
+@app.route('/api/orders/user/<address>', methods=['GET'])
+def get_user_orders(address):
+    address = address.lower()
+    user = db.session.get(User, address)
+    if not user:
+        return jsonify([]), 200
+        
+    if user.role == 'admin':
+        orders = Order.query.order_by(Order.created_at.desc()).all()
+    elif user.role == 'agent':
+        orders = Order.query.filter_by(agent_address=address).order_by(Order.created_at.desc()).all()
+    elif user.role == 'seller':
+        orders = Order.query.filter_by(seller_address=address).order_by(Order.created_at.desc()).all()
+    else:
+        orders = Order.query.filter_by(buyer_address=address).order_by(Order.created_at.desc()).all()
+        
+    return jsonify([o.to_dict() for o in orders]), 200
 
-@app.route('/api/escrow/update', methods=['POST'])
-def update_escrow_status():
+@app.route('/api/order/sync', methods=['POST'])
+def sync_order():
     data = request.json
-    contract_address = data.get('contractAddress')
-    event = data.get('event') 
+    db_order_id = data.get('dbOrderId')
+    order_id_onchain = data.get('orderIdOnchain') # From blockchain event
     
-    # Audit Log
-    log = AuditLog(event_type="Status Change", description=f"Contract {contract_address}: {event}")
+    event = data.get('event')
+    tx_hash = data.get('txHash')
+    block_num = data.get('blockNumber')
+    ipfs_hash = data.get('proofHash')
+    actor = data.get('actor', '').lower()
+    
+    # Prioritize lookup by unique DB primary key
+    if db_order_id:
+        order = db.session.get(Order, db_order_id)
+    else:
+        # Fallback to onchain Id (making sure we compare as correct types)
+        order = Order.query.filter(Order.order_id_onchain == order_id_onchain).first()
+
+    if not order:
+        app.logger.error(f"Sync failed: Order NOT found (DB_ID: {db_order_id}, OnChain: {order_id_onchain})")
+        return jsonify({"error": "Order not found"}), 404
+        
+    old_status = order.status
+    timestamp = datetime.utcnow()
+    
+    if event == "OrderConfirmed":
+        order.status = "Confirmed"
+        order.confirmed_at = timestamp
+        notif_target = order.buyer_address
+        msg = f"Order #{order_id_onchain} confirmed by seller."
+    elif event == "OrderShipped":
+        order.status = "Shipped"
+        order.shipped_at = timestamp
+        notif_target = order.agent_address
+        msg = f"Order #{order_id_onchain} shipped. Waiting for agent checkpoint."
+    elif event == "AgentCheckpoint":
+        order.status = "AtCheckpoint"
+        order.in_transit_at = timestamp
+        notif_target = order.buyer_address
+        msg = f"Order #{order_id_onchain} arrived at Agent Checkpoint."
+    elif event == "OrderDelivered":
+        order.status = "Delivered"
+        order.delivered_at = timestamp
+        notif_target = order.buyer_address
+        msg = f"Order #{order_id_onchain} delivered by seller! Please confirm receipt."
+    elif event == "OrderCompleted":
+        order.status = "Completed"
+        order.completed_at = timestamp
+        notif_target = order.seller_address
+        msg = f"Order #{order_id_onchain} completed by buyer. Funds released!"
+    elif event == "OrderDisputed":
+        order.status = "Disputed"
+        notif_target = "Admin" # Admins get this
+        msg = f"Order #{order_id_onchain} has been DISPUTED. Admin intervention required."
+        # Create notifs for all Admins
+        admins = User.query.filter_by(role='admin').all()
+        for a in admins:
+            push_notification(a.wallet_address, msg, "Supply Chain Dispute!")
+    elif event == "OrderResolved":
+        order.status = "Completed"
+        order.completed_at = timestamp
+        notif_target = order.buyer_address
+        msg = f"Order #{order_id_onchain} dispute resolved by Admin."
+        push_notification(order.seller_address, msg, "Dispute Resolved")
+    else:
+        return jsonify({"message": "Event ignored"}), 200
+
+    order.last_tx_hash = tx_hash
+    order.last_synced_block = block_num
+    
+    if ipfs_hash and ipfs_hash != "":
+        # Determine doc type based on event
+        dt = "photo" if event in ["OrderShipped", "AgentCheckpoint", "OrderDelivered"] else "receipt"
+        doc = OrderDocument(order_id=order.id, stage=order.status, ipfs_hash=ipfs_hash, doc_type=dt, uploaded_by=actor)
+        db.session.add(doc)
+        db.session.flush() # Get ID
+        
+        # Trigger OCR in background if it's a receipt
+        if dt == 'receipt':
+            from threading import Thread
+            Thread(target=process_document_ocr, args=(doc.id,)).start()
+    
+    log = AuditLog(order_id=order.id, event_type=event, description=f"State changed via {tx_hash[:8]}...", tx_hash=tx_hash, block_number=block_num, from_status=old_status, to_status=order.status)
     db.session.add(log)
     
-    # Platform Notification 
-    notif = Notification(user_address="Admin", message=f"Update on Escrow {contract_address}: {event}")
-    db.session.add(notif)
-    
-    # Send Email Alerts to all Escrow parties mapping
-    if contract_address:
-        escrow = Escrow.query.filter_by(contract_address=contract_address).order_by(Escrow.created_at.desc()).first()
-        if escrow:
-            # Update the actual status in the database
-            if "Released" in event or "Bridged" in event:
-                escrow.status = "Released"
-            else:
-                # Keep it as 'Action Performed' or use the event string directly but truncated
-                escrow.status = "Active" # Or just keep it as is if it's already 'Created'/'Active'
+    if notif_target != "Admin":
+        push_notification(notif_target, msg, f"Order Update: #{order_id_onchain}")
             
-            participants = [escrow.buyer_address, escrow.seller_address, escrow.agent_address]
-            for address in participants:
-                if not address:
-                    continue
-                    
-                # Store personal notification in DB
-                user_notif = Notification(user_address=address, message=f"Your Contract ({contract_address[:6]}...) Acted: {event}")
-                db.session.add(user_notif)
-
-                # Attempt Email Dispatch
-                user = db.session.get(User, address)
-                if user and user.email:
-                    subject = f"Escrow System Alert: Contract Updated ({contract_address[:6]}...)"
-                    body = f"Hello,\n\nAn action was performed on your Web3 Escrow Contract ({contract_address}).\n\nRecent Activity: {event}\n\nPlease check your Escrow dashboard for more precise details.\n\nThank you,\nThe Escrow Auditing System"
-                    send_email(user.email, subject, body)
-                    
     db.session.commit()
-    
-    return jsonify({"message": "Status securely updated and notifications dispatched"}), 200
+    return jsonify({"message": "Sync successful"}), 200
+
+@app.route('/api/order/<int:order_id>/documents', methods=['GET'])
+def get_order_documents(order_id):
+    docs = OrderDocument.query.filter_by(order_id=order_id).order_by(OrderDocument.uploaded_at.asc()).all()
+    return jsonify([d.to_dict() for d in docs]), 200
 
 @app.route('/api/transactions/clear', methods=['POST'])
 def clear_transactions():
     try:
-        db.session.query(Escrow).delete()
+        db.session.query(OrderDocument).delete()
+        db.session.query(Order).delete()
+        db.session.query(AuditLog).delete()
         db.session.commit()
         return jsonify({"message": "Transactions cleared"}), 200
     except Exception as e:
@@ -240,22 +446,6 @@ def clear_audits():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/notifications/filter', methods=['POST'])
-def filter_notifications():
-    data = request.json
-    address = data.get('address')
-    
-    if not address:
-        return jsonify({"error": "Address is required"}), 400
-        
-    try:
-        # Filter notifications for this specific address
-        filters = [Notification.user_address == address]
-        notifications = Notification.query.filter(*filters).order_by(Notification.timestamp.desc()).all()
-        return jsonify([n.to_dict() for n in notifications]), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/api/audits/filter', methods=['POST'])
 def filter_audits():
     data = request.json
@@ -264,64 +454,100 @@ def filter_audits():
     
     if not address:
         return jsonify({"error": "Address is required"}), 400
+
+    address = address.lower()
+    user = db.session.get(User, address)
+    
+    # Base query
+    if user and user.role == 'admin':
+        # Admins see everything
+        query = db.session.query(AuditLog)
+    else:
+        # Regular users see logs for orders they are involved in
+        query = db.session.query(AuditLog).join(Order, AuditLog.order_id == Order.id)
+        query = query.filter(db.or_(
+            Order.buyer_address == address,
+            Order.seller_address == address,
+            Order.agent_address == address
+        ))
+    
+    # Timeframe filtering
+    now = datetime.utcnow()
+    if timeframe == '24h':
+        query = query.filter(AuditLog.timestamp >= now - timedelta(hours=24))
+    elif timeframe == '7d':
+        query = query.filter(AuditLog.timestamp >= now - timedelta(days=7))
+    elif timeframe == '30d':
+        query = query.filter(AuditLog.timestamp >= now - timedelta(days=30))
         
+    logs = query.order_by(AuditLog.timestamp.desc()).all()
+    return jsonify([l.to_dict() for l in logs]), 200
+
+@app.route('/api/notifications/filter', methods=['POST'])
+def filter_notifications():
+    data = request.json
+    address = data.get('address')
+    if not address:
+        return jsonify({"error": "Address is required"}), 400
     try:
-        query = db.session.query(AuditLog).join(Escrow).filter(
-            (Escrow.buyer_address == address) | 
-            (Escrow.seller_address == address) | 
-            (Escrow.agent_address == address)
-        )
-        
-        # Timeframe filtering
-        now = datetime.utcnow()
-        if timeframe == '24h':
-            cutoff = now - timedelta(hours=24)
-            query = query.filter(AuditLog.timestamp >= cutoff)
-        elif timeframe == '7d':
-            cutoff = now - timedelta(days=7)
-            query = query.filter(AuditLog.timestamp >= cutoff)
-        elif timeframe == '30d':
-            cutoff = now - timedelta(days=30)
-            query = query.filter(AuditLog.timestamp >= cutoff)
-            
-        logs = query.order_by(AuditLog.timestamp.desc()).all()
-        return jsonify([l.to_dict() for l in logs]), 200
+        notifications = Notification.query.filter_by(user_address=address).order_by(Notification.timestamp.desc()).limit(15).all()
+        return jsonify([n.to_dict() for n in notifications]), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/notifications/clear', methods=['POST'])
 def clear_notifications():
     try:
-        db.session.query(Notification).delete()
+        address = request.json.get('address')
+        if address:
+            db.session.query(Notification).filter_by(user_address=address).delete()
+        else:
+            db.session.query(Notification).delete()
         db.session.commit()
         return jsonify({"message": "Notifications cleared"}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
+# --- Audit & Groq IPFS Process (From existing logic) ---
+
 @app.route('/api/audit/generate', methods=['POST'])
 def generate_audit_summary():
-    # Gather metrics
-    total = Escrow.query.count()
-    volume = db.session.query(db.func.sum(Escrow.amount)).scalar() or 0
-    disputes = AuditLog.query.filter(AuditLog.event_type.like('%Dispute%')).count()
+    data = request.json
+    address = data.get('address')
+    if not address:
+        return jsonify({"error": "Address is required"}), 400
+    
+    address = address.lower()
+    
+    # User-specific metrics
+    orders_query = Order.query.filter(db.or_(
+        Order.buyer_address == address,
+        Order.seller_address == address,
+        Order.agent_address == address
+    ))
+    total = orders_query.count()
+    volume = db.session.query(db.func.sum(Order.amount)).filter(db.or_(
+        Order.buyer_address == address,
+        Order.seller_address == address,
+        Order.agent_address == address
+    )).scalar() or 0
+    disputes = orders_query.filter_by(status='Disputed').count()
     
     groq_api_key = os.environ.get("GROQ_API_KEY")
     if not groq_api_key:
         return jsonify({"error": "GROQ_API_KEY environment variable not set."}), 500
         
     prompt = f"""
-    You are an AI Audit Engine for a Web3 Escrow service.
-    Please generate a short, professional monthly audit report summary formatted in Markdown.
+    You are an AI Audit Engine for a Web3 Supply Chain platform named dBlock Supplychain Escrow.
+    Please generate a short, professional monthly audit report summary for user {address} formatted in Markdown.
 
-    Here are the metrics for this month:
-    - Total Transaction Volume: {volume} ETH
-    - Total Escrows: {total}
-    - Potential Disputes Detected: {disputes}
-    - System Health: All smart contracts executed within expected gas limits.
-    - Compliance: Verified IPFS hashes for all {total} agreements.
+    Here are the user's specific metrics for this month:
+    - total volume associated with this wallet: {volume}
+    - total orders involved in: {total}
+    - disputes logged: {disputes}
 
-    Keep it concise but insightful. Format with bullet points or small paragraphs.
+    Keep it concise but insightful. Focus on their specific activity. Format with bullet points.
     """
 
     headers = {
@@ -332,7 +558,7 @@ def generate_audit_summary():
     payload = {
         "model": "llama-3.3-70b-versatile",
         "messages": [
-            {"role": "system", "content": "You are a professional auditor for a blockchain escrow service."},
+            {"role": "system", "content": "You are a professional auditor for a blockchain platform."},
             {"role": "user", "content": prompt}
         ],
         "temperature": 0.5,
@@ -345,92 +571,114 @@ def generate_audit_summary():
         result = response.json()
         summary_text = result["choices"][0]["message"]["content"]
     except Exception as e:
-        app.logger.error(f"Groq API Error: {e}")
-        # Fallback in case of API failure
-        summary_text = f"""
-        **Monthly Audit Report (Fallback)**
-        - **Total Transaction Volume**: {volume} (Combined ETH/USDT) across {total} escrows.
-        - **Risk Analysis**: {disputes} potential disputes detected.
-        - **System Health**: All smart contracts executed within expected gas limits. 
-        - **Compliance**: Verified IPFS hashes for all {total} agreements.
-        
-        *Generated by Fallback Audit Engine*
-        """
+        summary_text = f"**User Audit Report (Fallback)**\n- **Activity Volume**: {volume}\n- **Orders**: {total}\n- **Disputes**: {disputes}"
     
-    summary = AISummary(month=datetime.now().strftime('%Y-%m'), summary_text=summary_text)
+    summary = AISummary(user_address=address, month=datetime.now().strftime('%Y-%m'), summary_text=summary_text)
     db.session.add(summary)
     db.session.commit()
     
     return jsonify({"message": "Audit generated", "summary": summary.to_dict()})
 
-@app.route('/api/receipt/process', methods=['POST'])
-def process_receipt():
-    """Processes an uploaded receipt image using Groq Vision API to extract a summary and total."""
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part in the request"}), 400
+@app.route('/api/audit/latest/<address>', methods=['GET'])
+def get_latest_audit(address):
+    summary = AISummary.query.filter_by(user_address=address.lower()).order_by(AISummary.created_at.desc()).first()
+    if not summary:
+        return jsonify({"error": "No report found"}), 404
+    return jsonify(summary.to_dict()), 200
 
-    file = request.files['file']
-    
-    if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
+def process_document_ocr(doc_id):
+    """Hardened OCR: Adds retries, status updates, and explicit error reporting."""
+    import time
+    with app.app_context():
+        # Small delay to ensure the main thread has committed the doc record
+        time.sleep(1.5)
         
-    groq_api_key = os.environ.get("GROQ_API_KEY")
-    if not groq_api_key:
-        return jsonify({"error": "GROQ_API_KEY environment variable not set."}), 500
+        doc = db.session.get(OrderDocument, doc_id)
+        if not doc or doc.doc_type != 'receipt':
+            return
 
-    try:
-        # Read file and encode to base64
-        file_content = file.read()
-        base64_image = base64.b64encode(file_content).decode('utf-8')
+        # 1. Update status to 'Analyzing' so UI knows we are working
+        doc.ocr_result = "🔍 AI is currently analyzing the document... Please refresh in a moment."
+        db.session.commit()
         
-        # Determine mime type naively
-        mime_type = "image/jpeg"
-        if file.filename.lower().endswith('.png'):
-            mime_type = "image/png"
+        app.logger.info(f"Hardened OCR Start: doc {doc_id}")
+        
+        try:
+            # 2. Fetch from IPFS with Retries (3 attempts)
+            ipfs_content = None
+            for attempt in range(1, 4):
+                try:
+                    gateway_url = f"http://127.0.0.1:8080/ipfs/{doc.ipfs_hash}"
+                    app.logger.info(f"IPFS Fetch Attempt {attempt} for {doc.ipfs_hash}")
+                    resp = requests.get(gateway_url, timeout=12)
+                    if resp.ok:
+                        ipfs_content = resp.content
+                        break
+                except Exception as e:
+                    app.logger.warning(f"IPFS Attempt {attempt} failed: {e}")
+                time.sleep(2) # Wait before retry
+
+            if not ipfs_content:
+                doc.ocr_result = "❌ ERROR: Document could not be retrieved from IPFS after 3 attempts. Please ensure your IPFS Desktop/Daemon is running."
+                db.session.commit()
+                return
+
+            # 3. Encode & Prepare Payload
+            base64_image = base64.b64encode(ipfs_content).decode('utf-8')
             
-        headers = {
-            "Authorization": f"Bearer {groq_api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "model": "meta-llama/llama-4-scout-17b-16e-instruct",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Analyze this receipt. Provide a brief summary of what the transaction is for, and explicitly state the total amount."
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:{mime_type};base64,{base64_image}"
+            headers = {
+                "Authorization": f"Bearer {os.environ.get('GROQ_API_KEY')}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Provide a concise, professional summary of this financial document. Include: 1. Merchant/Issuer, 2. Date, 3. Total Amount, 4. Key Items Purchased, and 5. A brief verdict on document validity. If it is NOT a financial document, return strictly 'NOT_A_RECEIPT_ALERT'."
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": { "url": f"data:image/jpeg;base64,{base64_image}" }
                             }
-                        }
-                    ]
-                }
-            ]
-        }
-        
-        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=60)
-        response.raise_for_status()
-        result = response.json()
-        summary_text = result["choices"][0]["message"]["content"]
-        
-        return jsonify({
-            "message": "Receipt processed successfully",
-            "summary": summary_text
-        }), 200
-
-    except requests.exceptions.RequestException as e:
-        error_details = e.response.text if hasattr(e, 'response') and e.response is not None else str(e)
-        app.logger.error(f"Groq Vision API Error: {error_details}")
-        return jsonify({"error": f"Failed to process receipt with Groq API: {error_details}"}), 500
-    except Exception as e:
-        app.logger.error(f"Internal Server Error: {e}")
-        return jsonify({"error": "An unexpected error occurred"}), 500
+                        ]
+                    }
+                ],
+                "temperature": 0.1
+            }
+            
+            # 4. Call Groq with longer timeout
+            r = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=45)
+            
+            if r.ok:
+                text = r.json()["choices"][0]["message"]["content"]
+                if "NOT_A_RECEIPT_ALERT" in text:
+                    doc.ocr_result = "⚠️ ALERT: This document does not appear to be a receipt or financial record."
+                else:
+                    doc.ocr_result = text
+                app.logger.info(f"OCR Success for doc {doc_id}")
+            else:
+                raw_error = r.text
+                try:
+                    err_json = r.json()
+                    error_msg = err_json.get('error', {}).get('message', 'Unknown AI Error')
+                except:
+                    error_msg = f"HTTP {r.status_code}: {raw_error[:100]}"
+                
+                doc.ocr_result = f"❌ AI ERROR: {error_msg}"
+                app.logger.error(f"Groq API Error for doc {doc_id}: {error_msg}")
+            
+            db.session.commit()
+        except Exception as e:
+            app.logger.error(f"OCR Critical Crash: {e}")
+            try:
+                doc.ocr_result = f"🔥 SYSTEM ERROR: {str(e)}"
+                db.session.commit()
+            except: pass
 
 @app.route('/api/receipt/process_ipfs', methods=['POST'])
 def process_receipt_ipfs():
@@ -446,19 +694,13 @@ def process_receipt_ipfs():
         return jsonify({"error": "GROQ_API_KEY environment variable not set."}), 500
 
     try:
-        # Fetch from local IPFS gateway
         gateway_url = f"http://127.0.0.1:8080/ipfs/{ipfs_hash}"
         ipfs_response = requests.get(gateway_url, timeout=10)
         ipfs_response.raise_for_status()
         
         file_content = ipfs_response.content
         base64_image = base64.b64encode(file_content).decode('utf-8')
-        
-        mime_type = ipfs_response.headers.get('Content-Type', '')
-        if 'image/png' in mime_type:
-            mime_type = 'image/png'
-        else:
-            mime_type = 'image/jpeg' # Force an explicit image MIME type for Groq
+        mime_type = 'image/jpeg' 
             
         headers = {
             "Authorization": f"Bearer {groq_api_key}",
@@ -473,7 +715,7 @@ def process_receipt_ipfs():
                     "content": [
                         {
                             "type": "text",
-                            "text": "Analyze this receipt. Provide a brief summary of what the transaction is for, and explicitly state the total amount."
+                            "text": "Analyze this image/document from a supply chain stage. Provide a brief visual summary of the item or receipt."
                         },
                         {
                             "type": "image_url",
@@ -493,62 +735,41 @@ def process_receipt_ipfs():
         result = response.json()
         summary_text = result["choices"][0]["message"]["content"]
         
-        return jsonify({
-            "message": "IPFS Receipt processed successfully",
-            "summary": summary_text
-        }), 200
+        return jsonify({"message": "Processed successfully", "summary": summary_text}), 200
 
-    except requests.exceptions.RequestException as e:
-        error_details = e.response.text if hasattr(e, 'response') and e.response is not None else str(e)
-        app.logger.error(f"IPFS or Groq Vision API Error: {error_details}")
-        return jsonify({"error": f"Failed to fetch from IPFS or process with Groq API: {error_details}"}), 500
     except Exception as e:
         app.logger.error(f"Internal Server Error: {e}")
         return jsonify({"error": "An unexpected error occurred"}), 500
 
 @app.route('/upload-ipfs', methods=['POST'])
 def upload_ipfs():
-    """Handles file upload and adds it to the local IPFS node."""
-    
     if 'file' not in request.files:
         return jsonify({"error": "No file part in the request"}), 400
 
     file = request.files['file']
-    
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
     
     try:
-        # The IPFS API expects the file to be sent in a multipart form
         files = {
             'file': (file.filename, file.stream, file.mimetype)
         }
-        
-        # Send the file to the local IPFS daemon's /api/v0/add endpoint
         response = requests.post(LOCAL_IPFS_API_URL, files=files, timeout=60)
-        response.raise_for_status() # Raise an exception for HTTP error codes
-        
+        response.raise_for_status() 
         ipfs_data = response.json()
-        
-        # The IPFS API returns the hash as 'Hash'
         ipfs_hash = ipfs_data.get('Hash')
         
         if ipfs_hash:
             return jsonify({
-                "message": "File successfully added to local IPFS", 
+                "message": "File added to local IPFS", 
                 "ipfsHash": ipfs_hash,
-                "ipfsLink": f"http://127.0.0.1:8080/ipfs/{ipfs_hash}" # Use local gateway
+                "ipfsLink": f"http://127.0.0.1:8080/ipfs/{ipfs_hash}" 
             }), 200
         else:
             return jsonify({"error": "Local IPFS API did not return a hash", "details": ipfs_data}), 500
 
-    except requests.exceptions.ConnectionError:
-        return jsonify({"error": "Failed to connect to local IPFS node. Ensure 'ipfs daemon' is running on port 5001 and CORS is configured."}), 503
-    except requests.exceptions.RequestException as e:
-        app.logger.error(f"IPFS API Error: {e}")
-        return jsonify({"error": f"Local IPFS API request failed: {e}"}), 500
     except Exception as e:
-        app.logger.error(f"Internal Server Error: {e}")
+        app.logger.error(f"IPFS Error: {e}")
         return jsonify({"error": f"An unexpected error occurred: {e}"}), 500
 
 if __name__ == '__main__':

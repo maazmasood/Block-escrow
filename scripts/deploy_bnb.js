@@ -19,18 +19,26 @@ async function main() {
   const usdtAddr = await usdtBnb.getAddress();
   console.log("MockUSDT (BNB) Deployed:", usdtAddr);
 
-  // 2. Deploy EscrowMirror
-  const EscrowMirror = await hre.ethers.getContractFactory("EscrowMirror");
-  const mirror = await EscrowMirror.deploy(usdtAddr);
+  // 2. Deploy WETH_BNB
+  const WETH_BNB = await hre.ethers.getContractFactory("WETH_BNB");
+  const wethBnb = await WETH_BNB.deploy();
+  await wethBnb.waitForDeployment();
+  const wethAddr = await wethBnb.getAddress();
+  console.log("WETH (BNB) Deployed:", wethAddr);
+
+  // 3. Deploy SupplyChainMirror
+  const SupplyChainMirror = await hre.ethers.getContractFactory("SupplyChainMirror");
+  const mirror = await SupplyChainMirror.deploy();
   await mirror.waitForDeployment();
   const mirrorAddr = await mirror.getAddress();
-  console.log("EscrowMirror (BNB) Deployed:", mirrorAddr);
+  console.log("SupplyChainMirror (BNB) Deployed:", mirrorAddr);
 
-  // 3. Provide liquidity to the Mirror contract
+  // 4. Provide liquidity to the Mirror contract
   console.log("Minting liquidity to Mirror pool...");
   const initialLiquidity = ethers.parseUnits("1000000", 18);
   await usdtBnb.mint(mirrorAddr, initialLiquidity);
-  console.log("MockUSDT liquidity seeded to Mirror pool.");
+  await wethBnb.mint(mirrorAddr, initialLiquidity);
+  console.log("USDT and WETH liquidity seeded to Mirror pool.");
 
   // Update Config
   const configPath = path.join(__dirname, "../static/contract/multichain_config.json");
@@ -40,6 +48,7 @@ async function main() {
   }
 
   config.USDT_BNB = usdtAddr;
+  config.WETH_BNB = wethAddr;
   config.BNB_MIRROR = mirrorAddr;
 
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));

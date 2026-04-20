@@ -1,0 +1,110 @@
+{% extends "layout.html" %}
+
+{% block title %}Login{% endblock %}
+{% block page_title %}Connect Your Wallet{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center my-5">
+    <div class="col-md-6 col-lg-5">
+        <div class="card bg-glass shadow-lg text-white border border-secondary">
+            <div class="card-header bg-transparent border-bottom border-secondary text-center py-4">
+                <i class="fas fa-key fs-1 primary-text mb-3"></i>
+                <h4 class="mb-0 fw-bold">Secure Access</h4>
+                <p class="text-white-50 small mb-0 mt-2">Enter your private key to connect to the supply chain.</p>
+            </div>
+            
+            <div class="card-body p-4">
+                <form id="loginForm" onsubmit="event.preventDefault(); handleLogin();">
+                    <div class="mb-4">
+                        <label class="form-label text-gray-300 fw-bold">Private Key</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-dark border-secondary text-white-50"><i class="fas fa-lock"></i></span>
+                            <input type="password" id="pkInput" class="form-control bg-dark text-white border-secondary" placeholder="0x..." required>
+                        </div>
+                        <small class="text-muted d-block mt-1">Wallet address will be derived locally from this key.</small>
+                    </div>
+
+                    <button type="submit" id="loginBtn" class="btn btn-primary w-100 py-2 fw-bold text-uppercase fs-6 tracking-wide">
+                        <i class="fas fa-sign-in-alt me-2"></i> Connect & Login
+                    </button>
+                    
+                    <div class="text-center mt-3">
+                        <p class="small text-white-50">New here? <a href="/register" class="primary-text text-decoration-none">Create a Profile</a></p>
+                    </div>
+                    
+                    <div id="loginError" class="alert alert-danger mt-3 d-none p-2 small text-center"></div>
+                </form>
+            </div>
+            <div class="card-footer bg-transparent border-top border-secondary text-center py-3">
+                <small class="text-white-50"><i class="fas fa-shield-alt me-1"></i> dBlock Supplychain Escrow</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const sw = document.getElementById('sidebar-wrapper');
+        if (sw) sw.style.display = 'none';
+        const pw = document.getElementById('page-content-wrapper');
+        if (pw) {
+            pw.style.marginLeft = '0';
+            pw.style.width = '100%';
+        }
+        const nav = document.querySelector('nav');
+        if (nav) nav.style.display = 'none';
+        
+        // Auto-fill standard hardhat account 0 (Buyer) for ease testing
+        document.getElementById('pkInput').value = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+    });
+
+    async function handleLogin() {
+        const pk = document.getElementById('pkInput').value.trim();
+        const errDiv = document.getElementById('loginError');
+        const btn = document.getElementById('loginBtn');
+        
+        errDiv.classList.add('d-none');
+        
+        try {
+            const web3Local = new Web3();
+            let account;
+            try {
+                account = web3Local.eth.accounts.privateKeyToAccount(pk.startsWith('0x') ? pk : '0x'+pk);
+            } catch (e) {
+                throw new Error("Invalid Private Key format.");
+            }
+            
+            const address = account.address;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Identifying...';
+
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    address: address
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || "Login failed.");
+            }
+
+            // data.user contains the full profile from DB
+            localStorage.setItem('privateKey', pk);
+            localStorage.setItem('selectedAccount', address);
+            localStorage.setItem('userRole', data.user.role);
+            localStorage.setItem('userName', data.user.name);
+
+            window.location.href = '/';
+            
+        } catch (err) {
+            errDiv.innerText = err.message;
+            errDiv.classList.remove('d-none');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i> Connect & Login';
+        }
+    }
+</script>
+{% endblock %}

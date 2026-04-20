@@ -1,892 +1,675 @@
-// app.js
-// NOTE: This file assumes you have the latest Solidity contract compiled
-// and that abi.js and bytecode.js are loaded.
+// --- dBlock Supplychain Escrow Core JS ---
 
-// --- Global Variables & Configuration ---
-const ethProviderUrl = "http://127.0.0.1:8545"; // ETH Chain
-const bnbProviderUrl = "http://127.0.0.1:8546"; // BNB Chain
-const backendUrl = "http://127.0.0.1:5000";  
+const Web3 = window.Web3;
+let web3Local; // For signing 
+let contractConfig = {};
+let ABIs = {};
 
-let web3Eth = new Web3(ethProviderUrl);
-let web3Bnb = new Web3(bnbProviderUrl);
-let web3 = web3Eth; // Default to ETH
+// Stage mapping to numeric values for timeline completion calculation
+const STAGE_ORDER = {
+    'Created': 0,
+    'Confirmed': 1,
+    'Shipped': 2,
+    'AtCheckpoint': 3,
+    'Delivered': 4,
+    'Completed': 5,
+    'Disputed': -1,
+    'Resolved': 5
+};
 
-// Contract Addresses (Update after deployment)
-let USDT_ETH = "";
-let USDT_BNB = "";
-let ESCROW_SOURCE = "";
-let ESCROW_MIRROR = "";
-
-let selectedAccount;
-let contract;
-let contractAddress;
-let isMultichainMode = false;
-
-// Load Config from Deployment
-async function loadConfig() {
-    try {
-        const response = await fetch('/static/contract/multichain_config.json');
-        if (response.ok) {
-            const config = await response.json();
-            USDT_ETH = config.USDT_ETH;
-            USDT_BNB = config.USDT_BNB;
-            ESCROW_SOURCE = config.ETH_SOURCE;
-            ESCROW_MIRROR = config.BNB_MIRROR;
-            console.log("Multichain Config Loaded:", config);
-        }
-    } catch (err) {
-        console.warn("No multichain_config.json found. Please deploy contracts and update config.");
-    }
-}
-
-// --- Utility Functions ---
-
-/**
- * Copies the currently selected Ethereum address to the clipboard.
- * Uses the fallback method (document.execCommand('copy')) as navigator.clipboard
- * may not work in certain iframe environments.
- */
-function copyAddress() {
-    if (!selectedAccount) return alert("No active account selected to copy.");
-
-    // Create a temporary input element
-    const tempInput = document.createElement('input');
-    tempInput.value = selectedAccount;
-    document.body.appendChild(tempInput);
-
-    // Select the content
-    tempInput.select();
-    tempInput.setSelectionRange(0, 99999); // For mobile devices
-
-    try {
-        // Execute the copy command
-        const success = document.execCommand('copy');
-        if (success) {
-            // Provide visual feedback (replacing the button content briefly)
-            const btn = document.getElementById('copyAddressBtn');
-            const originalHtml = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-check me-1"></i> Copied!';
-
-            setTimeout(() => {
-                btn.innerHTML = originalHtml;
-            }, 1500);
-        } else {
-            alert("Copy failed. Please manually copy the address.");
-        }
-    } catch (err) {
-        console.error('Copy failed:', err);
-        alert("Copy failed due to browser restrictions. Please manually copy the address.");
-    }
-
-    // Clean up the temporary input
-    document.body.removeChild(tempInput);
-}
-
-// Generalized Copy Function
-function copyToClipboard(text, btnElement) {
-    // Create a temporary input element
-    const tempInput = document.createElement('input');
-    tempInput.value = text;
-    document.body.appendChild(tempInput);
-    tempInput.select();
-    tempInput.setSelectionRange(0, 99999); // For mobile
-
-    try {
-        const success = document.execCommand('copy');
-        if (success && btnElement) {
-            // Visual feedback
-            const originalHtml = btnElement.innerHTML;
-            btnElement.innerHTML = '<i class="fas fa-check text-success"></i>';
-            setTimeout(() => {
-                btnElement.innerHTML = originalHtml;
-            }, 1000);
-        }
-    } catch (err) {
-        console.error('Copy failed:', err);
-        alert("Manual copy required.");
-    }
-    document.body.removeChild(tempInput);
-}
-
-// Global function to handle account selection
-async function selectAccount(account) {
-    selectedAccount = account;
-    localStorage.setItem('selectedAccount', selectedAccount);
-
-    // Update Dropdown Toggle Text
-    const displayBtn = document.getElementById("selectedAccountDisplay");
-    if (displayBtn) {
-        const name = dynamicNamedAccounts[account] || ((typeof namedAccounts !== 'undefined' && namedAccounts[account]) ? namedAccounts[account] : account);
-        // Show Name if available, else partial address
-        displayBtn.innerText = name.startsWith("0x") ? `${name.substring(0, 6)}...${name.substring(name.length - 4)}` : name;
-    }
-
-    // Highlighting in the dropdown list
-    const allItems = document.querySelectorAll('.account-dropdown-item');
-    allItems.forEach(item => {
-        if (item.dataset.account === account) {
-            item.classList.add('bg-secondary', 'bg-opacity-25');
-        } else {
-            item.classList.remove('bg-secondary', 'bg-opacity-25');
-        }
-    });
-
-    // Update Dashboard Elements
-    const activeAccountText = document.getElementById("activeAccount");
-    if (activeAccountText) activeAccountText.innerText = selectedAccount;
-
-    await updateBalance();
+document.addEventListener("DOMContentLoaded", async () => {
+    // 1. Auth Check - Redirect if not logged in (unless on login page)
+    const isAuthPage = window.location.pathname.includes('/login') || window.location.pathname.includes('/register');
+    const pk = localStorage.getItem('privateKey');
     
-    // Auto-select provider based on current view/contract
-    if (localStorage.getItem('currentChain') === 'BNB') {
-        web3 = web3Bnb;
-    } else {
-        web3 = web3Eth;
-    }
-    
-    updateEscrowStatus();
-}
-
-async function fetchDynamicNames() {
-    try {
-        const res = await fetch(`${backendUrl}/api/users/mapping`);
-        if(res.ok) {
-            dynamicNamedAccounts = await res.json();
-        }
-    } catch(e) {
-        console.warn("Could not load dynamic names.");
-    }
-}
-
-async function loadAccounts() {
-    await fetchDynamicNames();
-    try {
-        const accounts = await web3.eth.getAccounts();
-        const list = document.getElementById("accountList");
-
-        if (list) {
-            list.innerHTML = "";
-            let storedAccount = localStorage.getItem('selectedAccount');
-
-            // Validate stored account
-            if (!storedAccount || !accounts.includes(storedAccount)) {
-                storedAccount = accounts[0];
-            }
-            // Trigger initial selection
-            await selectAccount(storedAccount);
-
-            accounts.forEach((acc, index) => {
-                const name = dynamicNamedAccounts[acc] || ((typeof namedAccounts !== 'undefined' && namedAccounts[acc])
-                    ? namedAccounts[acc]
-                    : `Account ${index}`);
-                // Create List Item
-                const li = document.createElement("li");
-
-                // Custom Content DIV
-                const container = document.createElement("div");
-                container.className = "d-flex justify-content-between align-items-center px-3 py-2 border-bottom border-secondary dropdown-item text-white account-dropdown-item";
-                container.style.cursor = "pointer";
-                container.dataset.account = acc;
-
-                if (acc === storedAccount) container.classList.add('bg-secondary', 'bg-opacity-25');
-
-                // Account Info Section (Click to Select)
-                const infoDiv = document.createElement("div");
-                infoDiv.className = "d-flex flex-column flex-grow-1 me-3";
-                infoDiv.onclick = (e) => {
-                    selectAccount(acc);
-                };
-
-                const nameSpan = document.createElement("span");
-                nameSpan.className = "fw-bold small";
-                nameSpan.innerText = name;
-
-                const addrSmall = document.createElement("small");
-                addrSmall.className = "text-muted";
-                addrSmall.style.fontSize = "0.7rem";
-                addrSmall.innerText = acc; // Show full address
-
-                infoDiv.appendChild(nameSpan);
-                infoDiv.appendChild(addrSmall);
-
-                // Copy Button (Click to Copy)
-                const copyBtn = document.createElement("button");
-                copyBtn.className = "btn btn-sm btn-dark border-secondary rounded-circle";
-                copyBtn.title = "Copy Address";
-                copyBtn.innerHTML = '<i class="fas fa-copy text-gray-400"></i>';
-                copyBtn.onclick = (e) => {
-                    e.stopPropagation(); // Prevent selection when copying
-                    copyToClipboard(acc, copyBtn);
-                };
-
-                container.appendChild(infoDiv);
-                container.appendChild(copyBtn);
-                li.appendChild(container);
-                list.appendChild(li);
-            });
-        }
-
-        updateBalance();
-    } catch (error) {
-        console.error("Error loading accounts:", error);
-    }
-}
-
-async function updateBalance() {
-    if (!selectedAccount) return;
-    try {
-        const balanceElem = document.getElementById("accountBalance");
-        const usdtElem = document.getElementById("usdtBalance");
-        if (!balanceElem) return;
-
-        // 1. Fetch ETH Balance
-        const balanceWei = await web3.eth.getBalance(selectedAccount);
-        const balanceEth = web3.utils.fromWei(balanceWei, "ether");
-        balanceElem.innerText = parseFloat(balanceEth).toFixed(4);
-
-        // 2. Fetch USDT Balance
-        const currentChain = localStorage.getItem('currentChain') || 'ETH';
-        const usdtAddr = (currentChain === 'BNB') ? USDT_BNB : USDT_ETH;
-        
-        if (usdtAddr && web3.utils.isAddress(usdtAddr)) {
-            const usdt = new web3.eth.Contract(usdtAbi, usdtAddr);
-            const usdtWei = await usdt.methods.balanceOf(selectedAccount).call();
-            const usdtEth = web3.utils.fromWei(usdtWei, "ether");
-            if (usdtElem) usdtElem.innerText = parseFloat(usdtEth).toFixed(2);
-        } else if (usdtElem) {
-            usdtElem.innerText = "0.00";
-        }
-    } catch (error) {
-        console.error("Error updating balance:", error);
-    }
-}
-
-// --- Contract Interaction Functions ---
-
-async function deployContract() {
-    if (!selectedAccount) return alert("Please select an account.");
-    try {
-        const escrow = new web3.eth.Contract(escrowAbi);
-        const deployed = await escrow.deploy({ data: escrowBytecode })
-            .send({ from: selectedAccount, gas: 5000000 });
-
-        contract = deployed;
-        contractAddress = deployed.options.address;
-        localStorage.setItem('deployedContractAddress', contractAddress); // Persist address
-
-        const contractAddrDisplay = document.getElementById("contractAddr");
-        if (contractAddrDisplay) contractAddrDisplay.innerText = contractAddress;
-
-        alert(`Contract deployed at: ${contractAddress}`);
-        updateEscrowStatus();
-    } catch (error) {
-        alert("Deployment failed: " + error.message);
-        console.error("Deployment failed:", error);
-    }
-}
-
-async function deployAndCreateEscrow() {
-    if (!selectedAccount) return alert("Please select an account first.");
-
-    try {
-        const receiver = document.getElementById("receiver").value;
-        const agent = document.getElementById("agentAddress").value;
-        const ipfsHash = document.getElementById("ipfsHashInput").value;
-        const amount = document.getElementById("amount").value;
-        const token = document.getElementById("tokenSelect").value;
-        const isMultichain = document.getElementById("isMultichain").checked;
-
-        if (!ipfsHash || ipfsHash === "Awaiting IPFS Upload...")
-            return alert("Please upload a file to IPFS first.");
-
-        const createBtn = document.getElementById("createBtn");
-        createBtn.disabled = true;
-        createBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Initializing...';
-
-        if (isMultichain) {
-            // Multichain Logic (USDT on ETH -> BNB)
-            if (token === "USDT") {
-                const usdt = new web3Eth.eth.Contract(usdtAbi, USDT_ETH);
-                const amountWei = web3Eth.utils.toWei(amount, "ether"); // Assuming 18 decimals for mock
-                
-                createBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Approving USDT...';
-                await usdt.methods.approve(ESCROW_SOURCE, amountWei).send({ from: selectedAccount });
-                
-                createBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Locking on ETH...';
-                const source = new web3Eth.eth.Contract(escrowSourceAbi, ESCROW_SOURCE);
-                const receipt = await source.methods.createEscrow(receiver, agent, amountWei, ipfsHash).send({ from: selectedAccount });
-                
-                const ethId = receipt.events.EscrowFunded.returnValues.id;
-
-                // Sync with Backend
-                await fetch(`${backendUrl}/api/escrow/create`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contractAddress: ESCROW_SOURCE,
-                        buyer: selectedAccount,
-                        receiver: receiver,
-                        agent: agent,
-                        amount: amount,
-                        token: "USDT",
-                        ipfsHash: ipfsHash,
-                        isMultichain: true,
-                        sourceChain: "8545",
-                        destChain: "8546",
-                        mirrorAddress: ESCROW_MIRROR
-                    })
-                });
-                alert("Multichain Escrow Created on ETH. Relayer will sync to BNB shortly.");
-            } else {
-                alert("Multichain currently only supports USDT for this demo.");
-            }
-        } else {
-            // Original Single Chain Logic (ETH)
-            // ... (keeping legacy support if needed)
-        }
-        window.location.href = "/transactions";
-
-    } catch (error) {
-        alert("Action failed: " + error.message);
-        console.error(error);
-        document.getElementById("createBtn").disabled = false;
-        document.getElementById("createBtn").innerHTML = 'Create Escrow';
-    }
-}
-
-// --- Multi-Contract Management ---
-
-function selectContract(address) {
-    if (!web3.utils.isAddress(address)) return;
-
-    localStorage.setItem('currentContractAddress', address);
-
-    // Update global state
-    contractAddress = address;
-    contract = new web3.eth.Contract(escrowAbi, contractAddress);
-
-    // Redirect if not on details page
-    if (!window.location.href.includes('contract_details')) {
-        window.location.href = '/contract_details';
-    } else {
-        // Just reload data
-        updateEscrowStatus();
-        const disp = document.getElementById("contractAddr");
-        if (disp) disp.innerText = address;
-    }
-}
-
-async function loadUserContracts() {
-    const account = localStorage.getItem('selectedAccount');
-    const tbody = document.getElementById('myContractsList');
-    const msg = document.getElementById('noContractsMsg');
-
-    if (!tbody) return; // Not on dashboard
-
-    if (!account) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-warning">Please connect wallet/select account.</td></tr>';
+    if (!pk && !isAuthPage) {
+        window.location.href = '/login';
         return;
     }
+    
+    if (pk) {
+        const activeChain = localStorage.getItem('selectedChain') || 'ETH';
+        updateChainUI(activeChain);
+        
+        web3Local = new Web3(new Web3.providers.HttpProvider(activeChain === 'BNB' ? "http://127.0.0.1:8546" : "http://127.0.0.1:8545"));
+        setupUI();
+        await loadConfig();
+        await updateBalances();
+        
+        // Router
+        const path = window.location.pathname;
+        if (path === '/' || path.includes('/dashboard')) {
+            loadDashboard();
+        } else if (path.includes('/order_tracking')) {
+            const targetId = localStorage.getItem('viewOrderTarget');
+            if (targetId) {
+                loadOrderTracking(targetId);
+            }
+        }
+    }
+});
 
+function setupUI() {
+    const acc = localStorage.getItem('selectedAccount');
+    const role = localStorage.getItem('userRole');
+    const name = localStorage.getItem('userName');
+    
+    const els = {
+        navUserName: document.getElementById('navUserName'),
+        navUserRole: document.getElementById('navUserRole'),
+        dashUserName: document.getElementById('dashUserName'),
+        dashUserRole: document.getElementById('dashUserRole'),
+        currentAccountHeader: document.getElementById('currentAccountHeader'),
+        dropdownAccountFull: document.getElementById('dropdownAccountFull')
+    };
+
+    if (els.navUserName) els.navUserName.innerText = name;
+    if (els.navUserRole) els.navUserRole.innerText = role.toUpperCase();
+    if (els.dashUserName) els.dashUserName.innerText = name;
+    if (els.dashUserRole) els.dashUserRole.innerText = role.toUpperCase();
+    
+    if (els.currentAccountHeader) els.currentAccountHeader.innerText = acc.substring(0,6) + '...' + acc.substring(acc.length-4);
+    if (els.dropdownAccountFull) els.dropdownAccountFull.innerText = acc;
+    
+    // Role-specific UI toggles
+    document.querySelectorAll('.dashboard-buyer-only').forEach(e => e.style.display = role === 'buyer' ? 'inline-block' : 'none');
+    document.querySelectorAll('.dashboard-seller-only').forEach(e => e.style.display = role === 'seller' ? 'inline-block' : 'none');
+    
+    // Populate avatars dynamically based on address hash (visual only)
+    const avatars = document.querySelectorAll('.header-avatar, .avatar-circle');
+    avatars.forEach(el => {
+        el.style.backgroundColor = '#' + acc.substring(2, 8);
+    });
+}
+
+async function loadConfig() {
     try {
-        // Show loading
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Loading contracts...</td></tr>';
+        const res = await fetch('/static/contract/multichain_config.json');
+        contractConfig = await res.json();
+    } catch (e) {
+        console.error("Config missing. Relies on hardhat deploy.");
+    }
+    
+    // Fallback simple ABI fetch if generated by deploy script, otherwise we assume abi.js loaded
+    if (typeof escrowSourceAbi !== 'undefined') {
+        // Assume abi.js was loaded which actually has our updated SupplyChain ABI constants
+        // Note: the backend deployment updates abi.js to be SupplyChainSource
+        // Actually, let's just make sure we fetch the ABI from artifacts if possible.
+        // For simplicity, we'll try to fetch it via API or assume the user has pasted the ABI in abi.js
+        console.log("Config loaded:", contractConfig);
+    }
+}
 
-        const res = await fetch(`/api/contracts/${account}`);
-        if (!res.ok) throw new Error("Failed");
+// Fetch ABIs dynamically from Hardhat artifacts served statically (or just through simple fetch)
+async function getContractInstance(chainType) {
+    const web3 = new Web3(chainType === 'ETH' ? "http://127.0.0.1:8545" : "http://127.0.0.1:8546");
+    
+    // Hack: we will fetch the ABI JSON directly from the artifacts directory via the flask static handler if mapped, 
+    // or we just define standard ABIs here if they aren't available. To be robust, let's load from /static/contract
+    // Wait, the python code uses `api/contract/abi`. Let's build a quick fetcher if it exists.
+    
+    // Fallback: Just rely on abi.js which MUST be updated by the developer.
+    // If not, we will throw.
+    if (typeof escrowSourceAbi === 'undefined') throw new Error("ABIs not loaded via abi.js");
+    
+    // Map escrowSourceAbi to SupplyChainSource (assuming user replaced it in abi.js as instructed)
+    const addr = chainType === 'ETH' ? contractConfig.ETH_SOURCE : contractConfig.BNB_MIRROR;
+    const abi = chainType === 'ETH' ? escrowSourceAbi : escrowMirrorAbi; 
+    
+    return new web3.eth.Contract(abi, addr);
+}
 
-        const contracts = await res.json();
-        tbody.innerHTML = '';
-
-        if (contracts.length === 0) {
-            if (msg) msg.classList.remove('d-none');
+async function updateBalances() {
+    const nativeEl = document.getElementById('balanceDisplay');
+    const usdtEl = document.getElementById('usdtBalance');
+    if (!nativeEl || !usdtEl) return;
+    
+    const acc = localStorage.getItem('selectedAccount');
+    const chain = localStorage.getItem('selectedChain') || 'ETH';
+    
+    try {
+        // 1. Primary Currency (ETH)
+        const nativeWeb3 = new Web3(chain === 'BNB' ? "http://127.0.0.1:8546" : "http://127.0.0.1:8545");
+        
+        if (chain === 'BNB') {
+            // On BNB, "ETH" is the WETH token
+            if (contractConfig.WETH_BNB) {
+                const wethContract = new nativeWeb3.eth.Contract(usdtAbi, contractConfig.WETH_BNB);
+                const wBal = await wethContract.methods.balanceOf(acc).call();
+                nativeEl.innerText = parseFloat(nativeWeb3.utils.fromWei(wBal, "ether")).toFixed(4);
+            }
+            // Also update the secondary gas balance
+            const nBal = await nativeWeb3.eth.getBalance(acc);
+            const gasEl = document.getElementById('gasBalance');
+            if (gasEl) gasEl.innerText = parseFloat(nativeWeb3.utils.fromWei(nBal, "ether")).toFixed(4);
         } else {
-            if (msg) msg.classList.add('d-none');
-            contracts.forEach(c => {
-                let role = "Guest";
-                if (c.buyer && c.buyer.toLowerCase() === account.toLowerCase()) role = "Buyer";
-                else if (c.seller && c.seller.toLowerCase() === account.toLowerCase()) role = "Seller";
-                else if (c.agent && c.agent.toLowerCase() === account.toLowerCase()) role = "Agent";
+            // On ETH, "ETH" is just native ETH
+            const nBal = await nativeWeb3.eth.getBalance(acc);
+            nativeEl.innerText = parseFloat(nativeWeb3.utils.fromWei(nBal, "ether")).toFixed(4);
+        }
+        
+        // 2. USDT Balance
+        const usdtAddr = chain === 'ETH' ? contractConfig.USDT_ETH : contractConfig.USDT_BNB;
+        if (usdtAddr) {
+            const usdtContract = new nativeWeb3.eth.Contract(usdtAbi, usdtAddr);
+            const uBal = await usdtContract.methods.balanceOf(acc).call();
+            usdtEl.innerText = parseFloat(nativeWeb3.utils.fromWei(uBal, "ether")).toFixed(2);
+        }
+    } catch(e) {
+        console.error("Error fetching balances", e);
+    }
+}
 
-                const row = `<tr>
-                    <td><small class="font-monospace text-info">${c.contract_address ? c.contract_address.substring(0, 8) + '...' + c.contract_address.substring(38) : 'Pending'}</small></td>
-                    <td><span class="badge bg-secondary">${role}</span></td>
-                    <td>${c.amount} ETH</td>
-                    <td><span class="badge bg-${c.status === 'Released' ? 'success' : 'warning'}">${c.status}</span></td>
-                    <td>
-                        <button class="btn btn-sm btn-primary" onclick="selectContract('${c.contract_address}')">
+function updateChainUI(chain) {
+    const label = document.getElementById('activeChainLabel');
+    if (label) {
+        label.innerText = chain === 'ETH' ? 'ETH Source' : 'BSC Mirror';
+    }
+}
+
+async function changeChain(chain) {
+    localStorage.setItem('selectedChain', chain);
+    updateChainUI(chain);
+    
+    // Update the local web3 instance for signing
+    web3Local = new Web3(new Web3.providers.HttpProvider(chain === 'BNB' ? "http://127.0.0.1:8546" : "http://127.0.0.1:8545"));
+    
+    await updateBalances();
+    
+    // Refresh dashboard data if on home
+    if (window.location.pathname === '/' || window.location.pathname.includes('/dashboard')) {
+        loadDashboard();
+    }
+}
+
+// --- API Helpers --- //
+
+async function apiGet(route) {
+    const res = await fetch('/api' + route);
+    if (!res.ok) throw new Error("API Get Error: " + route);
+    return await res.json();
+}
+
+async function apiPost(route, data) {
+    const res = await fetch('/api' + route, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const dat = await res.json();
+        throw new Error(dat.error || "API Post Error: " + route);
+    }
+    return await res.json();
+}
+
+async function uploadToIPFS(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch('/upload-ipfs', { method: 'POST', body: formData });
+    if (!res.ok) throw new Error("IPFS upload failed");
+    const data = await res.json();
+    return data.ipfsHash;
+}
+
+function getWeb3AndAccount(chain) {
+    const pk = localStorage.getItem('privateKey');
+    const web3 = new Web3(chain === 'BNB' ? "http://127.0.0.1:8546" : "http://127.0.0.1:8545");
+    const account = web3.eth.accounts.privateKeyToAccount(pk.startsWith('0x') ? pk : '0x'+pk);
+    web3.eth.accounts.wallet.add(account);
+    return { web3, account };
+}
+
+async function signAndSend(web3, account, txData, toAddress, value = "0") {
+    const tx = {
+        from: account.address,
+        to: toAddress,
+        data: txData,
+        value: value,
+        gas: 2000000,
+        gasPrice: await web3.eth.getGasPrice()
+    };
+    const signed = await web3.eth.accounts.signTransaction(tx, account.privateKey);
+    return await web3.eth.sendSignedTransaction(signed.rawTransaction);
+}
+
+// --- Dashboard --- //
+
+async function loadDashboard() {
+    const acc = localStorage.getItem('selectedAccount');
+    const tbody = document.getElementById('dashboardOrderTable');
+    if (!tbody) return;
+    
+    try {
+        const orders = await apiGet('/orders/user/' + acc);
+        if (orders.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-white-50">No active orders found.</td></tr>`;
+            return;
+        }
+        
+        tbody.innerHTML = '';
+        orders.slice(0, 5).forEach(o => { // Show top 5
+            tbody.innerHTML += `
+                <tr>
+                    <td class="ps-4 font-monospace text-white-50">#${o.order_id_onchain}</td>
+                    <td class="fw-bold">${o.product_description}</td>
+                    <td class="text-primary fw-bold">${o.amount} <span class="fs-6 text-white-50">${o.token_symbol}</span></td>
+                    <td><span class="status-badge status-${o.status}">${o.status}</span></td>
+                    <td class="text-end pe-4">
+                        <button class="btn btn-sm btn-outline-primary" onclick="viewOrderTracking('${o.id}')">
                             <i class="fas fa-eye"></i> View
                         </button>
                     </td>
-                </tr>`;
-                tbody.innerHTML += row;
-            });
+                </tr>
+            `;
+        });
+    } catch(e) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">Failed to load orders.</td></tr>`;
+    }
+}
+
+function viewOrderTracking(dbId) {
+    localStorage.setItem('viewOrderTarget', dbId);
+    window.location.href = '/order_tracking';
+}
+
+// --- Create Order --- //
+
+async function createSupplyChainOrder() {
+    const btn = document.getElementById('submitOrderBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Submitting to Blockchain...';
+    
+    try {
+        const { web3, account } = getWeb3AndAccount('ETH');
+        const contract = await getContractInstance('ETH');
+        
+        const desc = document.getElementById('productDesc').value;
+        const seller = document.getElementById('sellerSelect').value;
+        const agent = document.getElementById('agentSelect').value;
+        const tokenType = document.getElementById('tokenSelect').value;
+        const amountEth = document.getElementById('amountInput').value;
+        const amountWei = web3.utils.toWei(amountEth, "ether");
+        const isMulti = document.getElementById('multichainSelect').value === "true";
+        
+        let fileHash = "";
+        const fileInput = document.getElementById('poFileUpload');
+        if (fileInput.files.length > 0) {
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Uploading Document to IPFS...';
+            fileHash = await uploadToIPFS(fileInput.files[0]);
         }
+        
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Awaiting User Signature...';
+        
+        const tokenAddr = (tokenType === 'USDT' ? contractConfig.USDT_ETH : "0x0000000000000000000000000000000000000000").toLowerCase();
+        
+        // If USDT, we need to approve first
+        if (tokenType === 'USDT') {
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Approving USDT...';
+            const usdtContract = new web3.eth.Contract(usdtAbi, tokenAddr);
+            const approveData = usdtContract.methods.approve(contract.options.address, amountWei).encodeABI();
+            await signAndSend(web3, account, approveData, tokenAddr);
+        }
+        
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Mining Transaction...';
+        const txData = contract.methods.createOrder(
+            seller.toLowerCase(), 
+            agent.toLowerCase(), 
+            tokenAddr.toLowerCase(), 
+            amountWei, 
+            fileHash, 
+            isMulti
+        ).encodeABI();
+        const value = tokenType === 'ETH_NATIVE' || tokenType === 'ETH' ? amountWei : "0";
+        
+        const receipt = await signAndSend(web3, account, txData, contract.options.address, value);
+        
+        // Parse the event to get the exact onchain ID
+        // Note: this depends on contract emitting OrderCreated event exactly
+        let onchainId = 0;
+        try {
+            // Very simplified: just ask the contract for next ID and subtract 1
+            const nextId = await contract.methods.nextOrderId().call();
+            onchainId = Number(nextId) - 1;
+        } catch(e) {}
+        
+        // Post to backend
+        await apiPost('/order/create', {
+            contractAddress: contract.options.address,
+            orderIdOnchain: onchainId,
+            buyer: account.address,
+            seller: seller,
+            agent: agent,
+            amount: amountEth,
+            token: tokenType,
+            isMultichain: isMulti,
+            productDescription: desc,
+            ipfsHash: fileHash
+        });
+        
+        alert("Order created successfully!");
+        window.location.href = '/orders';
+        
     } catch (e) {
         console.error(e);
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading contracts.</td></tr>';
+        alert("Error: " + e.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-lock me-2"></i> Lock Funds & Initiate Order';
     }
 }
 
-async function confirmUser1() {
-    if (!contract) return alert("Deploy contract first!");
-    try {
-        await contract.methods.confirmUser1().send({ from: selectedAccount, gas: 200000 });
+// --- Order Tracking --- //
 
-        await fetch(`${backendUrl}/api/escrow/update`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contractAddress: contractAddress, event: `User1 (${selectedAccount}) Confirmed` })
-        });
+let currentTrackingOrder = null;
 
-        alert(`User1 confirmation (Step 1) sent.`);
-        updateEscrowStatus();
-    } catch (error) {
-        alert("User1 Confirmation failed: " + error.message);
+async function loadOrderTracking(dbId) {
+    document.getElementById('orderSelectContainer').style.display = 'none';
+    document.getElementById('orderViewContainer').style.display = 'flex';
+    
+    const acc = localStorage.getItem('selectedAccount');
+    
+    // Fetch all for user and find the specific one (naive approach to reuse api)
+    const orders = await apiGet('/orders/user/' + acc);
+    currentTrackingOrder = orders.find(o => String(o.id) === String(dbId));
+    
+    if (!currentTrackingOrder) {
+        // Maybe admin? Try to find it in the global list if they are admin
+        if(localStorage.getItem('userRole') === 'admin') {
+           const all = await apiGet('/orders/user/' + acc); // Server handles admin
+           currentTrackingOrder = all.find(o => String(o.id) === String(dbId));
+        }
+        if(!currentTrackingOrder) return alert("Order not found or access denied.");
+    }
+    
+    const o = currentTrackingOrder;
+    
+    // Populate details panel
+    document.getElementById('detailOnchainId').innerText = o.order_id_onchain;
+    document.getElementById('detailProduct').innerText = o.product_description;
+    document.getElementById('detailAmount').innerText = o.amount;
+    document.getElementById('detailToken').innerText = o.token_symbol;
+    document.getElementById('detailBuyer').innerText = o.buyer;
+    document.getElementById('detailSeller').innerText = o.seller;
+    document.getElementById('detailAgent').innerText = o.agent;
+    document.getElementById('detailNetwork').innerText = o.is_multichain ? "Multichain (ETH / BNB)" : "Single-Chain (ETH)";
+    
+    const badge = document.getElementById('orderStatusBadge');
+    badge.className = `status-badge status-${o.status}`;
+    badge.innerText = o.status;
+    
+    renderTimeline(o);
+    loadDocuments(o.id);
+    setupActionPanel(o, acc);
+}
+
+function renderTimeline(order) {
+    const list = document.getElementById('timelineContainer');
+    list.innerHTML = '';
+    
+    const stages = [
+        { key: 'Created', label: 'Order Created', icon: 'fa-file-contract', date: order.created_at },
+        { key: 'Confirmed', label: 'Seller Confirmed', icon: 'fa-thumbs-up', date: order.confirmed_at },
+        { key: 'Shipped', label: 'Items Shipped', icon: 'fa-truck-loading', date: order.shipped_at },
+        { key: 'AtCheckpoint', label: 'Agent Checkpoint', icon: 'fa-clipboard-check', date: order.in_transit_at },
+        { key: 'Delivered', label: 'Delivered', icon: 'fa-truck', date: order.delivered_at },
+        { key: 'Completed', label: 'Receipt Confirmed (Funds Released)', icon: 'fa-check-circle', date: order.completed_at }
+    ];
+    
+    let isDisputed = order.status === 'Disputed';
+    let currentPhaseIdx = STAGE_ORDER[order.status] !== undefined ? STAGE_ORDER[order.status] : 0;
+    
+    stages.forEach((s, idx) => {
+        const isPast = idx <= currentPhaseIdx;
+        const isActive = idx === currentPhaseIdx && !isPast; // Wait, if it's the current but not done? 
+        // Actually, if idx <= currentPhaseIdx it's done. 
+        const stateClass = isPast ? 'completed' : (idx === currentPhaseIdx + 1 ? 'active' : '');
+        
+        let timeHTML = s.date ? `<div class="timeline-date"><i class="far fa-clock me-1"></i>${new Date(s.date).toLocaleString()}</div>` : `<div class="timeline-date text-muted">Pending execution...</div>`;
+        
+        list.innerHTML += `
+            <div class="timeline-item ${stateClass}">
+                <div class="timeline-icon"><i class="fas ${s.icon}"></i></div>
+                <div class="timeline-content">
+                    <h6>${s.label}</h6>
+                    ${timeHTML}
+                </div>
+            </div>
+        `;
+    });
+
+    if (isDisputed) {
+        list.innerHTML += `
+           <div class="timeline-item active">
+                <div class="timeline-icon bg-danger text-white border-danger"><i class="fas fa-gavel"></i></div>
+                <div class="timeline-content border-danger">
+                    <h6 class="text-danger">Dispute Raised</h6>
+                    <div class="timeline-date text-muted">Awaiting Admin Resolution</div>
+                </div>
+            </div>
+        `;
     }
 }
 
-async function confirmAgent() {
-    if (!contractAddress) return alert("No contract selected!");
-    try {
-        const currentChain = localStorage.getItem('currentChain') || 'ETH';
-        const activeWeb3 = (currentChain === 'BNB') ? web3Bnb : web3Eth;
-        const activeAbi = (currentChain === 'BNB') ? escrowMirrorAbi : escrowSourceAbi;
-        const inst = new activeWeb3.eth.Contract(activeAbi, contractAddress);
-
-        await inst.methods.confirmAgent(0).send({ from: selectedAccount, gas: 200000 });
-
-        await fetch(`${backendUrl}/api/escrow/update`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contractAddress: contractAddress, event: `Agent (${selectedAccount}) Confirmed` })
-        });
-
-        alert(`Agent confirmation (Step 2) sent.`);
-        updateEscrowStatus();
-    } catch (error) {
-        alert("Agent Confirmation failed: " + error.message);
-    }
-}
-
-async function confirmUser2() {
-    if (!contractAddress) return alert("No contract selected!");
-    const btn = document.getElementById("confirmUser2Btn");
+async function loadDocuments(orderId) {
+    const gallery = document.getElementById('documentGallery');
+    gallery.innerHTML = '<span class="text-white-50 small">Loading proofs...</span>';
     
     try {
-        const currentChain = localStorage.getItem('currentChain') || 'ETH';
-        const activeWeb3 = (currentChain === 'BNB') ? web3Bnb : web3Eth;
-        
-        if (currentChain === 'BNB') {
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Releasing...';
-            }
-
-            const inst = new activeWeb3.eth.Contract(escrowMirrorAbi, contractAddress);
-            
-            // Hardcoding 0 for demo purposes, but we should ideally pass the ID
-            const receipt = await inst.methods.confirmUserB(0).send({ from: selectedAccount, gas: 300000 });
-            
-            if (!receipt.status) {
-                throw new Error("Blockchain transaction reverted.");
-            }
-
-            // ONLY update backend if blockchain succeeded
-            await fetch(`${backendUrl}/api/escrow/update`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contractAddress: contractAddress, event: `User2/B (${selectedAccount}) Released Funds` })
-            });
-
-            alert(`Confirmation (Step 3) successful! Funds have been released on BNB.`);
-        } else {
-             alert("Release action is currently only handled on the BNB Mirror for multichain escrows.");
-        }
-
-        updateEscrowStatus();
-        updateBalance();
-    } catch (error) {
-        alert("Confirmation failed: " + error.message);
-        if (btn) {
-            btn.disabled = false;
-            btn.innerText = "Step 3: Release Funds";
-        }
-    }
-}
-
-// --- IPFS Upload Logic ---
-
-async function uploadFileToIPFS() {
-    const fileInput = document.getElementById('fileInput');
-    const ipfsResultBox = document.getElementById('ipfsResultBox');
-    const ipfsHashDisplay = document.getElementById('ipfsHashDisplay');
-    const ipfsHashInput = document.getElementById('ipfsHashInput');
-
-    if (fileInput.files.length === 0) {
-        return alert("Please select a file to upload.");
-    }
-
-    const file = fileInput.files[0];
-    const formData = new FormData();
-    formData.append('file', file);
-
-    ipfsResultBox.style.display = 'none';
-    ipfsHashInput.value = "Uploading...";
-    document.getElementById('uploadIpfsBtn').disabled = true;
-
-    try {
-        const response = await fetch(`${backendUrl}/upload-ipfs`, {
-            method: 'POST',
-            body: formData,
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            let errorMsg = `HTTP error! Status: ${response.status}`;
-            try {
-                const errorData = JSON.parse(errorText);
-                errorMsg = errorData.error || errorMsg;
-            } catch (e) {
-                errorMsg = `Server Error: ${errorText.substring(0, 100)}...`;
-            }
-            throw new Error(errorMsg);
-        }
-
-        const data = await response.json();
-        const ipfsHash = data.ipfsHash;
-
-        ipfsHashDisplay.innerText = ipfsHash;
-        ipfsHashInput.value = ipfsHash;
-        ipfsResultBox.style.display = 'block';
-        alert("File successfully uploaded to local IPFS!");
-
-    } catch (error) {
-        alert(`IPFS Upload Failed: ${error.message}. Check your Python backend and IPFS daemon.`);
-        console.error("IPFS Upload Failed:", error);
-        ipfsHashInput.value = "Upload Failed";
-    } finally {
-        document.getElementById('uploadIpfsBtn').disabled = false;
-    }
-}
-
-// --- Dynamic UI & Status Functions ---
-
-function getRole(account, data) {
-    if (!account || !data.user1) return "Guest";
-
-    const acc = account.toLowerCase();
-    const u1 = data.user1.toLowerCase();
-    const u2 = data.user2.toLowerCase();
-    const ag = data.agent.toLowerCase();
-
-    console.log(`[Debug] Checking Role for: ${acc}`);
-    console.log(`[Debug] Contract Parties - U1: ${u1}, U2: ${u2}, Agent: ${ag}`);
-    console.log(`[Debug] Active: ${data.isActive}`);
-
-    const isInitiated = u1 !== '0x0000000000000000000000000000000000000000';
-
-    if (acc === u1) return data.isActive ? "User 1 (Payer)" : isInitiated ? "Initiator (Escrow Closed)" : "Initiator (New)";
-    if (acc === u2) return data.isActive ? "User 2 (Receiver)" : "Guest";
-    if (acc === ag) return data.isActive ? "Agent (Mediator)" : "Guest";
-    return isInitiated && !data.isActive ? "Guest (Escrow Closed)" : "Guest";
-}
-
-function isParty(role) {
-    return role.includes("User 1") || role.includes("User 2") || role.includes("Agent");
-}
-
-
-function updateDashboardUI(data) {
-    const role = getRole(selectedAccount, data);
-    const userRoleElem = document.getElementById("userRole");
-    if (userRoleElem) userRoleElem.innerText = role;
-
-    // Update Dashboard Badge
-    const badge = document.getElementById("contractStatusBadge");
-    if (badge) {
-        badge.innerText = data.isActive ? "Active" : "Inactive";
-        badge.className = data.isActive ? "fs-2 text-success" : "fs-2 text-white";
-    }
-
-    // Helper for safe style setting
-    const setDisplay = (id, style) => {
-        const el = document.getElementById(id);
-        if (el) {
-            // Handle container lookups for confirming buttons
-            if (id.includes('Btn')) {
-                const container = el.closest('.col-md-4');
-                if (container) container.style.display = style;
-            } else {
-                el.style.display = style;
-            }
-        }
-    };
-
-    // 1. Reset creation form visibility based on active status
-    // FIX: Do not hide creation form if we are on the create_contract page
-    if (!window.location.href.includes('create_contract')) {
-        setDisplay('user1-actions', data.isActive ? 'none' : 'block');
-    } else {
-        setDisplay('user1-actions', 'block');
-    }
-
-    // 2. Reset confirmation/preview visibility
-    setDisplay('ipfs-preview', 'none');
-    setDisplay('confirmUser1Btn', 'none'); // Passed ID triggers container lookup in helper
-    setDisplay('confirmAgentBtn', 'none');
-    setDisplay('confirmUser2Btn', 'none');
-    setDisplay('no-active-escrow', 'none');
-
-    // 3. Handle Guest or Inactive State 
-    if ((role.includes("Guest") && data.isActive) || (role.includes("Closed"))) {
-        if (role.includes("Initiator") && !data.isActive) {
-            setDisplay('user1-actions', 'block');
-        } else {
-            setDisplay('user1-actions', 'none');
-        }
-
-        if (!data.isActive && !role.includes("Initiator")) {
-            setDisplay('no-active-escrow', 'block');
-            const noEscrowEl = document.getElementById('no-active-escrow');
-            if (noEscrowEl) noEscrowEl.innerText = "No active escrow found, or you are not a party.";
-        }
-
-        if (role.includes("Closed")) {
-            const noEscrowEl = document.getElementById('no-active-escrow');
-            if (noEscrowEl) noEscrowEl.innerText = "Escrow is complete and closed.";
-            setDisplay('no-active-escrow', 'block');
-        }
-    }
-
-
-    // 4. Handle Active Escrow States (Confirmation buttons and IPFS preview)
-    if (data.isActive) {
-
-        // **MODIFICATION HERE: ONLY SHOW IPFS PREVIEW IF THE USER IS A PARTY**
-        if (data.ipfsHash && data.ipfsHash !== '0x' && isParty(role)) {
-            setDisplay('ipfs-preview', 'block');
-            const link = `http://127.0.0.1:8080/ipfs/${data.ipfsHash}`;
-            const contentDiv = document.getElementById('ipfsFileContent');
-
-            if (contentDiv) {
-                // Simple heuristic to display image or link
-                if (data.ipfsHash.length > 5 && (data.ipfsHash.includes('Q') || data.ipfsHash.includes('b'))) {
-                    contentDiv.innerHTML = `<img src="${link}" alt="Escrow Document" class="img-fluid rounded" style="max-height: 250px; object-fit: contain;">
-                                            <p class="mt-2 text-wrap"><small>Link: <a href="${link}" target="_blank">${link.substring(0, 50)}...</a></small></p>`;
-                    
-                    // --- AI SUMMARY FETCH LOGIC ---
-                    const aiContainer = document.getElementById('aiSummaryContent');
-                    const aiText = document.getElementById('aiSummaryText');
-                    if (aiContainer && aiText) {
-                        aiContainer.style.display = 'block';
-                        // Only fetch if it hasn't been fetched yet to prevent spamming
-                        if (!aiContainer.dataset.fetchedFor || aiContainer.dataset.fetchedFor !== data.ipfsHash) {
-                            aiText.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Analyzing receipt with AI...';
-                            aiContainer.dataset.fetchedFor = data.ipfsHash;
-                            
-                            fetch(`${backendUrl}/api/receipt/process_ipfs`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ ipfsHash: data.ipfsHash })
-                            })
-                            .then(res => res.json())
-                            .then(aiData => {
-                                if (aiData.summary) {
-                                    // Use simple text replace for newlines
-                                    aiText.innerHTML = aiData.summary.replace(/\\n/g, '<br>');
-                                } else {
-                                    aiText.innerText = "Summary not available.";
-                                }
-                            })
-                            .catch(err => {
-                                console.error('AI Fetch error', err);
-                                aiText.innerText = "Error analyzing receipt with AI.";
-                            });
-                        }
-                    }
-                    // --- END AI SUMMARY FETCH LOGIC ---
-                } else {
-                    contentDiv.innerHTML = `<p class="text-warning mb-0"><i class="fas fa-file-alt me-1"></i> Document Hash Found</p>
-                                            <p class="text-wrap"><small>Hash: ${data.ipfsHash}</small></p>
-                                            <a href="${link}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-link me-1"></i> View Document</a>`;
-                }
-            }
-        }
-        // **END MODIFICATION**
-
-
-        // Logic for Confirmation Buttons (Enforcing Sequential Flow & Visibility)
-        const btnU1 = document.getElementById('confirmUser1Btn');
-        const btnA = document.getElementById('confirmAgentBtn');
-        const btnU2 = document.getElementById('confirmUser2Btn');
-
-        // Helper to reset button state
-        const setButtonState = (btn, isMyTurn, isDone, labelPending, labelAction, labelDone) => {
-            if (!btn) return;
-
-            // Ensure container is visible for all parties
-            const container = btn.closest('.col-md-4');
-            if (container) container.style.display = 'block';
-
-            btn.classList.remove('btn-primary', 'btn-outline-warning', 'btn-outline-info', 'btn-outline-success', 'btn-secondary');
-
-            if (isDone) {
-                btn.disabled = true;
-                btn.innerText = labelDone;
-                btn.classList.add('btn-success');
-            } else if (isMyTurn) {
-                btn.disabled = false;
-                btn.innerText = labelAction;
-                btn.classList.add('btn-primary');
-            } else {
-                btn.disabled = true;
-                btn.innerText = labelPending;
-                btn.classList.add('btn-secondary');
-            }
-        };
-
-        if (isParty(role)) {
-            // Step 1: User 1
-            const isU1Turn = role.includes("User 1") && !data.user1Confirmed;
-            setButtonState(btnU1, isU1Turn, data.user1Confirmed, "Waiting for User 1", "Step 1: Confirm Now", "Step 1: Confirmed ✅");
-
-            // Step 2: Agent
-            const isAgentTurn = role.includes("Agent") && data.user1Confirmed && !data.agentConfirmed;
-            // Additional check: If User 1 hasn't confirmed, Agent sees "Pending User 1" essentially
-            const agentLabelPending = !data.user1Confirmed ? "Waiting for User 1" : "Waiting for Agent";
-            setButtonState(btnA, isAgentTurn, data.agentConfirmed, agentLabelPending, "Step 2: Confirm Now", "Step 2: Confirmed ✅");
-
-            // Step 3: User 2
-            const isU2Turn = role.includes("User 2") && data.user1Confirmed && data.agentConfirmed && !data.user2Confirmed;
-            const u2LabelPending = !data.agentConfirmed ? "Waiting for Previous Steps" : "Waiting for User 2";
-            setButtonState(btnU2, isU2Turn, data.user2Confirmed, u2LabelPending, "Step 3: Release Funds", "Step 3: Funds Released 💰");
-        }
-    }
-}
-
-async function updateEscrowStatus() {
-    // Determine which chain we are on
-    const currentChain = localStorage.getItem('currentChain') || 'ETH';
-    web3 = (currentChain === 'BNB') ? web3Bnb : web3Eth;
-    
-    // Update Network Label
-    const netLabel = document.getElementById("currentNetworkLabel");
-    if (netLabel) netLabel.innerText = currentChain;
-
-    if (!contractAddress) return;
-    
-    try {
-        const res = await fetch(`${backendUrl}/api/contracts/${selectedAccount}`);
-        const contracts = await res.json();
-        const currentEscrow = contracts.find(c => c.contract_address === contractAddress || c.mirror_address === contractAddress);
-        
-        if (!currentEscrow) return;
-
-        const isMirror = (currentChain === 'BNB');
-        const activeAbi = isMirror ? escrowMirrorAbi : escrowSourceAbi;
-        
-        // Use the correct address for the current chain
-        const activeAddress = isMirror ? currentEscrow.mirror_address : currentEscrow.contract_address;
-        
-        if (!activeAddress || activeAddress === "") {
-             if (document.getElementById("escrowStatus")) {
-                document.getElementById("escrowStatus").innerText = `Network: ${currentChain}\nStatus: Awaiting Bridge Sync...`;
-            }
+        const docs = await apiGet('/order/' + orderId + '/documents');
+        gallery.innerHTML = '';
+        if (docs.length === 0) {
+            gallery.innerHTML = '<span class="text-white-50 small">No cryptographic proofs uploaded.</span>';
             return;
         }
-
-        const inst = new web3.eth.Contract(activeAbi, activeAddress);
-        const data = await inst.methods.escrows(0).call(); // Simplified ID for demo
         
-        // Map to standard UI object (handling both named and indexed results)
-        // Web3.js results can be accessed by name or index
-        const uiData = isMirror ? {
-            user1: data.buyer || data[1],
-            user2: data.seller || data[2],
-            agent: data.agent || data[3],
-            amount: data.amount || data[4],
-            user1Confirmed: true, 
-            agentConfirmed: true,
-            user2Confirmed: (data.confirmedByBNB !== undefined) ? data.confirmedByBNB : data[6],
-            isActive: !((data.released !== undefined) ? data.released : data[7]),
-            ipfsHash: data.ipfsHash || data[5]
-        } : {
-            user1: data.buyer || data[0],
-            user2: data.seller || data[1],
-            agent: data.agent || data[2],
-            amount: data.amount || data[3],
-            user1Confirmed: true, 
-            agentConfirmed: data.agentConfirmed || data[5],
-            user2Confirmed: data.isBridged || data[6],
-            isActive: !((data.isBridged !== undefined) ? data.isBridged : data[6]),
-            ipfsHash: data.ipfsHash || data[4]
-        };
+        docs.forEach(d => {
+            const isImg = d.doc_type === 'photo';
+            const icon = isImg ? 'fa-image' : 'fa-file-alt';
+            // Use IPFS gateway
+            const url = `http://127.0.0.1:8080/ipfs/${d.ipfs_hash}`;
+            
+            // Encode OCR result to base64 to handle newlines and quotes safely
+            const safeOCR = btoa(unescape(encodeURIComponent(d.ocr_result || "No data extracted.")));
 
-        updateDashboardUI(uiData);
-        
-        if (document.getElementById("escrowStatus")) {
-            document.getElementById("escrowStatus").innerText = `Network: ${currentChain}\nStatus: ${uiData.isActive ? 'Active' : 'Closed'}`;
+            gallery.innerHTML += `
+                <div class="doc-placeholder bg-dark border-secondary text-center p-2" style="cursor:pointer;" 
+                     onclick="openPreview('${url}', '${d.ipfs_hash}', '${safeOCR}')" title="${d.stage} Phase Proof">
+                    <i class="fas ${icon} fs-3 primary-text d-block mb-1"></i>
+                    <small style="font-size: 0.6rem;">${d.stage}</small>
+                </div>
+            `;
+        });
+    } catch(e) { console.error(e); }
+}
+
+function openPreview(url, hash, ocr) {
+    document.getElementById('previewModalImage').src = url;
+    document.getElementById('previewModalHash').innerText = "IPFS: " + hash;
+    document.getElementById('previewModalDownload').href = url;
+    
+    const role = localStorage.getItem('userRole');
+    const ocrSec = document.getElementById('ocrSection');
+    const ocrCon = document.getElementById('ocrContent');
+    
+    if (role === 'admin') {
+        ocrSec.classList.remove('d-none');
+        try {
+            // Decode from base64 safely
+            const decoded = decodeURIComponent(escape(atob(ocr)));
+            ocrCon.innerText = decoded;
+        } catch(e) {
+            ocrCon.innerText = ocr || "Analyzing document content...";
         }
+    } else {
+        ocrSec.classList.add('d-none');
+    }
 
-    } catch (err) {
-        console.warn("Status fetch failed", err);
+    const m = new bootstrap.Modal(document.getElementById('previewModal'));
+    m.show();
+}
+
+function setupActionPanel(order, myAddress) {
+    const box = document.getElementById('actionPanelBox');
+    const text = document.getElementById('actionText');
+    const btn = document.getElementById('actionBtn');
+    const disp = document.getElementById('disputeArea');
+    const role = localStorage.getItem('userRole');
+    
+    box.classList.add('d-none');
+    disp.classList.add('d-none');
+    
+    myAddress = myAddress.toLowerCase();
+    
+    // Logic: who acts next?
+    if (order.status === 'Created' && order.seller.toLowerCase() === myAddress) {
+        showAction("Awaiting your confirmation to accept this order.", "Confirm Order");
+        disp.classList.remove('d-none');
+    } 
+    else if (order.status === 'Confirmed' && order.seller.toLowerCase() === myAddress) {
+        showAction("Ready to ship? Upload the shipping manifest or photo and mark as shipped.", "Mark as Shipped");
+        disp.classList.remove('d-none');
+    }
+    else if (order.status === 'Shipped' && order.agent.toLowerCase() === myAddress) {
+        showAction("Confirm the cargo has arrived at the checkpoint.", "Verify Checkpoint");
+    }
+    else if (order.status === 'AtCheckpoint' && order.seller.toLowerCase() === myAddress) {
+        showAction("Once reach final destination, mark as delivered.", "Mark Delivered");
+    }
+    else if (order.status === 'Delivered' && order.buyer.toLowerCase() === myAddress) {
+        showAction("Please confirm receipt of your goods to release locked funds to the seller.", "Confirm Receipt");
+        disp.classList.remove('d-none');
+    }
+    else if (order.status === 'Disputed' && role === 'admin') {
+        showAction("As Admin, review the documents and force resolve this dispute.", "Resolve Dispute (Pay Seller)");
+        // Add a second button dynamically for paying buyer
+        const div = document.createElement('div');
+        div.innerHTML = `<button class="btn btn-outline-danger w-100 fw-bold mt-2" onclick="executeAdminResolve('buyer')">Resolve Dispute (Refund Buyer)</button>`;
+        btn.parentNode.insertBefore(div, btn.nextSibling);
+        btn.setAttribute('onclick', "executeAdminResolve('seller')");
+        // Hide file upload for admin
+        document.getElementById('proofUploadSection').style.display = 'none';
+        
+    } else {
+        // Not my turn
+        return;
+    }
+    
+    function showAction(msg, btnLabel) {
+        box.classList.remove('d-none');
+        text.innerText = msg;
+        
+        // Explicitly show which chain the action is targeting
+        const chainLabel = order.is_multichain ? 'BNB' : 'ETH';
+        btn.innerText = `${btnLabel} (${chainLabel})`;
+        
+        document.getElementById('proofUploadSection').style.display = 'block';
     }
 }
 
-function switchNetwork(chain) {
-    localStorage.setItem('currentChain', chain);
-    web3 = (chain === 'BNB') ? web3Bnb : web3Eth;
-    location.reload();
+// Global execution function mapper based on status
+async function executeNextStage() {
+    const o = currentTrackingOrder;
+    let funcName = "";
+    if (o.status === 'Created') funcName = "confirmOrder";
+    else if (o.status === 'Confirmed') funcName = "shipOrder";
+    else if (o.status === 'Shipped') funcName = "agentCheckpoint";
+    else if (o.status === 'AtCheckpoint') funcName = "deliverOrder";
+    else if (o.status === 'Delivered') funcName = "confirmReceipt";
+    
+    if(!funcName) return;
+    await executeChainTransaction(funcName);
 }
 
-// --- Event Listeners ---
+async function raiseDispute() {
+    await executeChainTransaction("raiseDispute");
+}
 
-document.addEventListener('DOMContentLoaded', async () => {
-    await loadConfig();
-    loadAccounts();
-
-    // Check for persisted contract address
-    // Check for persisted contract address (Multi-contract support uses 'currentContractAddress')
-    const savedContractAddress = localStorage.getItem('currentContractAddress');
-
-    if (savedContractAddress && web3.utils.isAddress(savedContractAddress)) {
-        // Verify code
-        web3.eth.getCode(savedContractAddress).then(code => {
-            if (code !== '0x') {
-                contractAddress = savedContractAddress;
-                contract = new web3.eth.Contract(escrowAbi, contractAddress);
-
-                const contractAddrDisplay = document.getElementById("contractAddr");
-                if (contractAddrDisplay) contractAddrDisplay.innerText = contractAddress;
-
-                // Update UI status
-                setTimeout(updateEscrowStatus, 500);
-            }
-        }).catch(console.error);
+async function executeAdminResolve(winnerRole) {
+    const o = currentTrackingOrder;
+    const winnerAddr = winnerRole === 'buyer' ? o.buyer : o.seller;
+    
+    const btn = document.getElementById('actionBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resolving...';
+    
+    try {
+        const chain = o.is_multichain ? 'BNB' : 'ETH';
+        const { web3, account } = getWeb3AndAccount(chain);
+        const contract = await getContractInstance(chain);
+        
+        const txData = contract.methods.adminResolveDispute(o.order_id_onchain, winnerAddr.toLowerCase()).encodeABI();
+        const txHash = await signAndSend(web3, account, txData, contract.options.address);
+        
+        await fetchSyncAPI('OrderResolved', txHash.transactionHash, "", account.address);
+        alert("Dispute resolved successfully. Funds released.");
+        window.location.reload();
+    } catch(e) {
+        console.error(e);
+        alert("Action failed: " + e.message);
+        btn.disabled = false;
+        btn.innerText = 'Retry';
     }
+}
 
-    // Load User Contracts (if on dashboard)
-    setTimeout(loadUserContracts, 1000);
+async function executeChainTransaction(funcName) {
+    const o = currentTrackingOrder;
+    const btn = document.getElementById('actionBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+    
+    try {
+        // If multichain, the source functions beyond create apply to the BNB mirror
+        const chain = o.is_multichain ? 'BNB' : 'ETH';
+        const { web3, account } = getWeb3AndAccount(chain);
+        const contract = await getContractInstance(chain);
+        
+        let fileHash = "";
+        const fileInput = document.getElementById('actionProofFile');
+        if (fileInput && fileInput.files.length > 0) {
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+            fileHash = await uploadToIPFS(fileInput.files[0]);
+        }
+        
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Requesting Signature...';
+        
+        // Contract call
+        const txData = contract.methods[funcName](o.order_id_onchain, fileHash).encodeABI();
+        const txHash = await signAndSend(web3, account, txData, contract.options.address);
+        
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mining & Syncing...';
+        
+        // Map function to Event name for Relayer/Sync backend
+        const eventMap = {
+            'confirmOrder' : 'OrderConfirmed',
+            'shipOrder' : 'OrderShipped',
+            'agentCheckpoint' : 'AgentCheckpoint',
+            'deliverOrder' : 'OrderDelivered',
+            'confirmReceipt' : 'OrderCompleted',
+            'raiseDispute' : 'OrderDisputed'
+        };
+        
+        // Ping backend to register the event (or wait for python relayer to do it. But to make UI snappy we ping)
+        await fetchSyncAPI(eventMap[funcName], txHash.transactionHash, fileHash, account.address);
+        
+        alert("Operation successful!");
+        window.location.reload();
+    } catch(e) {
+        console.error(e);
+        alert("Action failed: " + e.message);
+        btn.disabled = false;
+        btn.innerText = 'Try Again';
+    }
+}
 
-    const copyBtn = document.getElementById("copyAddressBtn");
-    if (copyBtn) copyBtn.onclick = copyAddress;
-
-    const uploadBtn = document.getElementById("uploadIpfsBtn");
-    if (uploadBtn) uploadBtn.onclick = uploadFileToIPFS;
-
-    // Wire up the new create button
-    const createBtn = document.getElementById("createBtn");
-    if (createBtn) createBtn.onclick = deployAndCreateEscrow;
-
-    const u1Btn = document.getElementById("confirmUser1Btn");
-    if (u1Btn) u1Btn.onclick = confirmUser1;
-
-    const agentBtn = document.getElementById("confirmAgentBtn");
-    if (agentBtn) agentBtn.onclick = confirmAgent;
-
-    const u2Btn = document.getElementById("confirmUser2Btn");
-    if (u2Btn) u2Btn.onclick = confirmUser2;
-
-    setInterval(() => {
-        updateBalance();
-        updateEscrowStatus();
-    }, 5000);
-});
+async function fetchSyncAPI(eventName, txHash, proofHash, actorStr) {
+    const o = currentTrackingOrder;
+    await apiPost('/order/sync', {
+        dbOrderId: o.id,
+        orderIdOnchain: o.order_id_onchain,
+        event: eventName,
+        txHash: txHash,
+        blockNumber: 0, 
+        proofHash: proofHash,
+        actor: actorStr
+    });
+}

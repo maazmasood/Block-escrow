@@ -158,7 +158,11 @@
         if (!confirm("Are you sure you want to clear all your notifications?")) return;
         const account = localStorage.getItem('selectedAccount');
         try {
-            const res = await fetch('/api/notifications/clear', { method: 'POST' });
+            const res = await fetch('/api/notifications/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: account })
+            });
             if (res.ok) {
                 loadNotifications(account);
             } else {

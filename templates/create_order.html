@@ -1,0 +1,134 @@
+{% extends "layout.html" %}
+
+{% block title %}Create Order{% endblock %}
+{% block page_title %}Initiate Supply Chain Order{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card bg-glass border-secondary shadow-sm mb-4">
+            <div class="card-header border-secondary bg-transparent d-flex align-items-center">
+                <i class="fas fa-file-invoice-dollar primary-text fs-4 me-2"></i>
+                <h5 class="mb-0 fw-bold">New Order Configuration</h5>
+            </div>
+            <div class="card-body">
+                <form id="createOrderForm" onsubmit="event.preventDefault(); createSupplyChainOrder();">
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label class="form-label text-gray-300 fw-bold">Product / Order Description</label>
+                            <input type="text" class="form-control" id="productDesc" placeholder="e.g. 50x Industrial Sensors (Batch #1042)" required>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label text-gray-300 fw-bold">Seller</label>
+                            <select class="form-select" id="sellerSelect" required>
+                                <option value="" disabled selected>Select Supplier</option>
+                                {% for s in sellers %}
+                                <option value="{{ s.wallet_address }}">{{ s.name }} ({{ s.wallet_address[:8] }}...)</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-gray-300 fw-bold">Agent (Checkpoint/Customs)</label>
+                            <select class="form-select" id="agentSelect" required>
+                                <option value="" disabled selected>Select Agent</option>
+                                {% for a in agents %}
+                                <option value="{{ a.wallet_address }}">{{ a.name }} ({{ a.wallet_address[:8] }}...)</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                         <div class="col-md-6">
+                            <label class="form-label text-gray-300 fw-bold">Payment Currency</label>
+                            <select class="form-select" id="tokenSelect" onchange="toggleNetworkMode()" required>
+                                <option value="ETH_NATIVE">Native ETH</option>
+                                <option value="USDT">USDT (ERC20)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-gray-300 fw-bold">Amount</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-dark border-secondary text-white-50" id="currencySymbol">ETH</span>
+                                <input type="number" step="0.001" class="form-control" id="amountInput" placeholder="0.00" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label text-gray-300 fw-bold">Network Architecture</label>
+                            <select class="form-select" id="multichainSelect" required>
+                                <option value="false">Single-Chain (ETH Source)</option>
+                                <option value="true">Multichain (ETH -> BNB Mirror)</option>
+                            </select>
+                            <small class="text-white-50 mt-1 d-block">Multichain relies on the Relayer to port the order to the BNB chain.</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-gray-300 fw-bold">Purchase Order (Optional Proof)</label>
+                            <input class="form-control" type="file" id="poFileUpload">
+                            <small class="text-white-50 mt-1 d-block">Uploaded to IPFS. Becomes the first step in the audit trail.</small>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-3 border-top border-secondary pt-3 mt-4">
+                        <button type="button" class="btn btn-outline-secondary px-4 fw-bold">Cancel</button>
+                        <button type="submit" id="submitOrderBtn" class="btn btn-primary px-4 fw-bold">
+                            <i class="fas fa-lock me-2"></i> Lock Funds & Initiate Order
+                        </button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card bg-glass border-secondary shadow-sm mb-4">
+            <div class="card-header border-secondary bg-transparent">
+                <i class="fas fa-info-circle primary-text me-2"></i>
+                <h6 class="mb-0 fw-bold d-inline-block">Order Summary</h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush bg-transparent">
+                    <li class="list-group-item bg-transparent text-white-50 d-flex justify-content-between align-items-center px-0">
+                        Total Cost
+                        <span class="text-white fw-bold fs-5" id="summaryCost">0.00 ETH</span>
+                    </li>
+                    <li class="list-group-item bg-transparent text-white-50 d-flex justify-content-between align-items-center px-0">
+                        Network
+                        <span class="text-white fw-bold badge bg-secondary" id="summaryNetwork">Local ETH</span>
+                    </li>
+                    <li class="list-group-item bg-transparent text-white-50 px-0 pb-0">
+                        <small>By initiating this order, your funds will be locked in the <strong>SupplyChainSource</strong> smart contract until the final Delivery Receipt is confirmed.</small>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleNetworkMode() {
+        const t = document.getElementById('tokenSelect').value;
+        document.getElementById('currencySymbol').innerText = t === 'USDT' ? 'USDT' : 'ETH';
+        updateSummary();
+    }
+    
+    document.getElementById('amountInput').addEventListener('input', updateSummary);
+    document.getElementById('multichainSelect').addEventListener('change', updateSummary);
+    
+    function updateSummary() {
+        const amt = document.getElementById('amountInput').value || '0.00';
+        const t = document.getElementById('tokenSelect').value === 'USDT' ? 'USDT' : 'ETH';
+        const m = document.getElementById('multichainSelect').value === 'true';
+        
+        document.getElementById('summaryCost').innerText = `${amt} ${t}`;
+        document.getElementById('summaryNetwork').innerText = m ? 'Multichain (ETH+BNB)' : 'Single-Chain (ETH)';
+    }
+</script>
+{% endblock %}

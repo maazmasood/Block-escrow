@@ -4,73 +4,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DBlock Escrow | {% block title %}Dashboard{% endblock %}</title>
-    <!-- Bootstrap 5 -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
-        crossorigin="anonymous">
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <title>dBlock - {% block title %}Dashboard{% endblock %}</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <!-- Custom CSS -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700&display=swap"
+        rel="stylesheet">
+
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <!-- Web3.js -->
-    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
-    <!-- Contract Files -->
-    <script src="{{ url_for('static', filename='contract/abi.js') }}"></script>
-    <script src="{{ url_for('static', filename='contract/bytecode.js') }}"></script>
-    <script src="{{ url_for('static', filename='accounts_data.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
-<body>
+<body class="bg-dark text-white">
+
     <div class="d-flex" id="wrapper">
+
         <!-- Sidebar -->
-        <div class="bg-dark-glass border-end" id="sidebar-wrapper">
-            <div
-                class="sidebar-heading text-center py-4 primary-text fs-4 fw-bold text-uppercase border-bottom border-secondary">
-                <i class="fas fa-cube me-2"></i>DBlock
+        <div class="bg-glass border-end border-secondary" id="sidebar-wrapper">
+            <div class="sidebar-heading text-center py-4 fs-4 fw-bold font-outfit tracking-wide">
+                <i class="fas fa-link primary-text me-2"></i>dBlock <span class="text-white-50">Supplychain
+                    Escrow</span>
             </div>
+            <div class="user-profile px-4 pb-3 mb-3 border-bottom border-secondary text-center" id="sidebarUserProfile">
+                <div class="avatar-circle mx-auto mb-2 bg-primary text-white d-flex align-items-center justify-content-center fw-bold fs-4"
+                    style="height: 60px; width: 60px; border-radius: 50%;">
+                    ?
+                </div>
+                <h6 class="mb-0 fw-bold user-name-display" id="navUserName">Not Logged In</h6>
+                <small class="text-white-50 user-role-badge badge rounded-pill mt-1" id="navUserRole">Guest</small>
+            </div>
+
             <div class="list-group list-group-flush my-3">
-                <a href="{{ url_for('dashboard') }}"
-                    class="list-group-item list-group-item-action bg-transparent second-text {% if request.endpoint == 'dashboard' %}active{% endif %}">
-                    <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+                <a href="/" class="list-group-item list-group-item-action bg-transparent second-text fw-bold">
+                    <i class="fas fa-chart-line me-2"></i>Dashboard
                 </a>
-
-                <a href="{{ url_for('create_contract') }}"
-                    class="list-group-item list-group-item-action bg-transparent second-text {% if request.endpoint == 'create_contract' %}active{% endif %}">
-                    <i class="fas fa-plus-circle me-2"></i>Create Contract
+                <a href="/create_order"
+                    class="list-group-item list-group-item-action bg-transparent second-text fw-bold">
+                    <i class="fas fa-file-contract me-2"></i>Create Order
                 </a>
-
-                <a href="{{ url_for('contract_details') }}"
-                    class="list-group-item list-group-item-action bg-transparent second-text {% if request.endpoint == 'contract_details' %}active{% endif %}">
-                    <i class="fas fa-file-contract me-2"></i>Contract Details
+                <a href="/orders" class="list-group-item list-group-item-action bg-transparent second-text fw-bold">
+                    <i class="fas fa-exchange-alt me-2"></i>All Orders
                 </a>
-
-                <a href="{{ url_for('transactions') }}"
-                    class="list-group-item list-group-item-action bg-transparent second-text {% if request.endpoint == 'transactions' %}active{% endif %}">
-                    <i class="fas fa-project-diagram me-2"></i>Transactions
+                <a href="/audits" class="list-group-item list-group-item-action bg-transparent second-text fw-bold">
+                    <i class="fas fa-shield-alt me-2"></i>Audits & AI
                 </a>
-                <a href="{{ url_for('audits') }}"
-                    class="list-group-item list-group-item-action bg-transparent second-text {% if request.endpoint == 'audits' %}active{% endif %}">
-                    <i class="fas fa-chart-line me-2"></i>Audits & Logs
+                <a href="/notifications"
+                    class="list-group-item list-group-item-action bg-transparent second-text fw-bold d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-bell me-2"></i>Alerts</span>
                 </a>
-                <a href="{{ url_for('notifications') }}"
-                    class="list-group-item list-group-item-action bg-transparent second-text {% if request.endpoint == 'notifications' %}active{% endif %}">
-                    <i class="fas fa-bell me-2"></i>Notifications
-                </a>
-                <a href="#" class="list-group-item list-group-item-action bg-transparent text-danger fw-bold mt-5">
-                    <i class="fas fa-power-off me-2"></i>Logout
+                <a href="#" onclick="logout(); return false;"
+                    class="list-group-item list-group-item-action bg-transparent text-danger fw-bold mt-5 border-top border-secondary">
+                    <i class="fas fa-sign-out-alt me-2"></i>Logout
                 </a>
             </div>
         </div>
-        <!-- /#sidebar-wrapper -->
 
         <!-- Page Content -->
         <div id="page-content-wrapper">
-            <nav class="navbar navbar-expand-lg navbar-dark bg-transparent py-4 px-4">
+            <nav class="navbar navbar-expand-lg navbar-dark bg-transparent py-3 px-4 border-bottom border-secondary">
                 <div class="d-flex align-items-center">
-                    <i class="fas fa-align-left primary-text fs-4 me-3" id="menu-toggle"></i>
-                    <h2 class="fs-2 m-0 text-white fw-bold">{% block page_title %}Overview{% endblock %}</h2>
+                    <i class="fas fa-align-left primary-text fs-4 me-3" id="menu-toggle" style="cursor: pointer;"></i>
+                    <h2 class="fs-4 m-0 font-outfit">{% block page_title %}{% endblock %}</h2>
                 </div>
 
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
@@ -80,64 +80,94 @@
                 </button>
 
                 <div class="collapse navbar-collapse" id="navbarSupportedContent">
-                    <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-                        <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-center">
-                            <!-- Network Switcher -->
-                            <li class="nav-item me-3">
-                                <div class="dropdown">
-                                    <button class="btn btn-outline-info rounded-pill border border-secondary dropdown-toggle px-3" type="button" data-bs-toggle="dropdown">
-                                        <i class="fas fa-network-wired me-2"></i><span id="currentNetworkLabel">ETH</span>
-                                    </button>
-                                    <ul class="dropdown-menu dropdown-menu-end bg-dark-glass border-secondary shadow-lg">
-                                        <li><a class="dropdown-item text-white" href="#" onclick="switchNetwork('ETH')">ETH (Port 8545)</a></li>
-                                        <li><a class="dropdown-item text-white" href="#" onclick="switchNetwork('BNB')">BNB (Port 8546)</a></li>
-                                    </ul>
-                                </div>
-                            </li>
-                            
-                            <li class="nav-item">
-                                <div class="dropdown">
-                                    <button
-                                        class="btn btn-dark rounded-pill border border-secondary dropdown-toggle d-flex align-items-center px-3"
-                                        type="button" id="accountDropdownBtn" data-bs-toggle="dropdown"
-                                        aria-expanded="false">
-                                        <i class="fas fa-wallet text-warning me-2"></i>
-                                        <span id="selectedAccountDisplay"
-                                            class="fw-bold text-white me-1">Connecting...</span>
-                                    </button>
-                                    <ul class="dropdown-menu dropdown-menu-end bg-dark-glass border-secondary shadow-lg mt-2"
-                                        id="accountList" style="min-width: 320px; max-height: 400px; overflow-y: auto;">
-                                        <!-- JS will populate this -->
-                                        <li><span class="dropdown-item-text text-muted">Loading accounts...</span></li>
-                                    </ul>
-                                </div>
-                            </li>
-                        </ul>
+                    <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-center">
+                        <li class="nav-item me-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-dark border border-secondary p-2 shadow-sm fs-6"
+                                    title="Main Payout Currency (ETH)">
+                                    <i class="fab fa-ethereum text-primary me-1"></i> <span
+                                        id="balanceDisplay">0.00</span> ETH
+                                </span>
+                                <span class="badge bg-dark border border-secondary p-2 shadow-sm fs-6"
+                                    title="USDT Balance">
+                                    <i class="fas fa-dollar-sign text-success me-1"></i> <span
+                                        id="usdtBalance">0.00</span> USDT
+                                </span>
+                            </div>
+                        </li>
+                        <li class="nav-item me-3">
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-primary dropdown-toggle fw-bold" type="button"
+                                    id="chainDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fas fa-network-wired me-1"></i> <span id="activeChainLabel">ETH
+                                        Source</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end bg-dark border-secondary shadow-lg">
+                                    <li><a class="dropdown-item text-white" href="#"
+                                            onclick="changeChain('ETH')">Ethereum (Source)</a></li>
+                                    <li><a class="dropdown-item text-white" href="#" onclick="changeChain('BNB')">BSC
+                                            Mirror</a></li>
+                                </ul>
+                            </div>
+                        </li>
+                        <li class="nav-item">
+                            <div class="dropdown">
+                                <button
+                                    class="btn btn-outline-secondary dropdown-toggle bg-glass shadow-sm border-secondary d-flex align-items-center gap-2"
+                                    type="button" id="accountDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <div class="header-avatar bg-primary rounded-circle"
+                                        style="width: 25px; height: 25px;"></div>
+                                    <span id="currentAccountHeader" class="fw-bold font-monospace">0x...</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end bg-dark border-secondary shadow-lg z-3 position-absolute"
+                                    aria-labelledby="accountDropdown">
+                                    <li>
+                                        <h6 class="dropdown-header text-white-50 user-name-display">Active Account</h6>
+                                    </li>
+                                    <li><a class="dropdown-item text-white account-item font-monospace small active"
+                                            href="#">
+                                            <i class="fas fa-wallet text-success me-2"></i><span
+                                                id="dropdownAccountFull">0x...</span>
+                                        </a></li>
+                                </ul>
+                            </div>
+                        </li>
                     </ul>
                 </div>
             </nav>
 
-            <div class="container-fluid px-4">
+            <div class="container-fluid px-4 pt-4 pb-5 content-area">
                 {% block content %}{% endblock %}
             </div>
         </div>
     </div>
-    <!-- /#page-content-wrapper -->
 
-    <!-- Bootstrap Bundle -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
-        crossorigin="anonymous"></script>
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         var el = document.getElementById("wrapper");
         var toggleButton = document.getElementById("menu-toggle");
+        if (toggleButton) {
+            toggleButton.onclick = function () {
+                el.classList.toggle("toggled");
+            };
+        }
 
-        toggleButton.onclick = function () {
-            el.classList.toggle("toggled");
-        };
+        // Global Logout Function
+        function logout() {
+            localStorage.removeItem('privateKey');
+            localStorage.removeItem('selectedAccount');
+            localStorage.removeItem('userRole');
+            localStorage.removeItem('userName');
+            window.location.href = '/login';
+        }
     </script>
-    <!-- Custom Logic -->
+    <!-- Contract ABIs & Config -->
+    <!-- We will inject new ABI variables in a script generated by deploy script or statically. 
+         But since we need ABI on UI, we load it dynamically or inline -->
+    <script src="{{ url_for('static', filename='contract/abi.js') }}"></script>
+    <!-- Main Script -->
     <script src="{{ url_for('static', filename='script.js') }}"></script>
-    {% block scripts %}{% endblock %}
 </body>
 
 </html>
