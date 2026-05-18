@@ -49,7 +49,10 @@ ipfs daemon
 
 ---
 
-### 5. Start Python Backend & Relayer
+### 5. Fund users and assign the admin role
+python fund_users.py
+
+### 6. Start Python Backend & Relayer
 In your fifth terminal, start the Flask web server and the cross-chain relayer:
 
 **Start the Flask App**:

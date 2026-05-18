@@ -13,11 +13,27 @@
             </div>
             <div class="card-body">
                 <form id="createOrderForm" onsubmit="event.preventDefault(); createSupplyChainOrder();">
-                    
+
                     <div class="row mb-3">
                         <div class="col-md-12">
                             <label class="form-label text-dark fw-bold">Product / Order Description</label>
-                            <input type="text" class="form-control" id="productDesc" placeholder="e.g. 50x Industrial Sensors (Batch #1042)" required>
+                            <input type="text" class="form-control" id="productDesc"
+                                placeholder="e.g. 50x Industrial Sensors (Batch #1042)" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label text-dark fw-bold">City</label>
+                            <input type="text" class="form-control" id="cityInput" placeholder="e.g. New York">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-dark fw-bold">Country</label>
+                            <input type="text" class="form-control" id="countryInput" placeholder="e.g. USA">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-dark fw-bold">Phone</label>
+                            <input type="text" class="form-control" id="phoneInput" placeholder="e.g. +1 555 1234">
                         </div>
                     </div>
 
@@ -27,7 +43,8 @@
                             <select class="form-select" id="sellerSelect" required>
                                 <option value="" disabled selected>Select Supplier</option>
                                 {% for s in sellers %}
-                                <option value="{{ s.wallet_address }}">{{ s.name }} ({{ s.wallet_address[:8] }}...)</option>
+                                <option value="{{ s.wallet_address }}">{{ s.name }} ({{ s.wallet_address[:8] }}...)
+                                </option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -36,14 +53,15 @@
                             <select class="form-select" id="agentSelect" required>
                                 <option value="" disabled selected>Select Agent</option>
                                 {% for a in agents %}
-                                <option value="{{ a.wallet_address }}">{{ a.name }} ({{ a.wallet_address[:8] }}...)</option>
+                                <option value="{{ a.wallet_address }}">{{ a.name }} ({{ a.wallet_address[:8] }}...)
+                                </option>
                                 {% endfor %}
                             </select>
                         </div>
                     </div>
 
                     <div class="row mb-3">
-                         <div class="col-md-6">
+                        <div class="col-md-6">
                             <label class="form-label text-gray-300 fw-bold">Payment Currency</label>
                             <select class="form-select" id="tokenSelect" onchange="toggleNetworkMode()" required>
                                 <option value="ETH_NATIVE">Native ETH</option>
@@ -53,8 +71,10 @@
                         <div class="col-md-6">
                             <label class="form-label text-gray-300 fw-bold">Amount</label>
                             <div class="input-group">
-                                <span class="input-group-text bg-dark border-secondary text-white-50" id="currencySymbol">ETH</span>
-                                <input type="number" step="0.001" class="form-control" id="amountInput" placeholder="0.00" required>
+                                <span class="input-group-text bg-dark border-secondary text-white-50"
+                                    id="currencySymbol">ETH</span>
+                                <input type="number" step="0.001" class="form-control" id="amountInput"
+                                    placeholder="0.00" required>
                             </div>
                         </div>
                     </div>
@@ -66,12 +86,14 @@
                                 <option value="false">Single-Chain (ETH Source)</option>
                                 <option value="true">Multichain (ETH -> BNB Mirror)</option>
                             </select>
-                            <small class="text-white-50 mt-1 d-block">Multichain relies on the Relayer to port the order to the BNB chain.</small>
+                            <small class="text-white-50 mt-1 d-block">Multichain relies on the Relayer to port the order
+                                to the BNB chain.</small>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label text-dark fw-bold">Purchase Order (Optional Proof)</label>
+                            <label class="form-label text-dark fw-bold">Order Document (Optional)</label>
                             <input class="form-control" type="file" id="poFileUpload">
-                            <small class="text-muted mt-1 d-block">Uploaded to IPFS. Becomes the first step in the audit trail.</small>
+                            <small class="text-muted mt-1 d-block">Uploaded to IPFS. Becomes the first step in the audit
+                                trail.</small>
                         </div>
                     </div>
 
@@ -86,7 +108,7 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-lg-4">
         <div class="card border-0 shadow-sm mb-4">
             <div class="card-header bg-transparent py-3">
@@ -95,16 +117,19 @@
             </div>
             <div class="card-body">
                 <ul class="list-group list-group-flush bg-transparent">
-                    <li class="list-group-item bg-transparent text-secondary d-flex justify-content-between align-items-center px-0">
+                    <li
+                        class="list-group-item bg-transparent text-secondary d-flex justify-content-between align-items-center px-0">
                         Total Cost
                         <span class="text-dark fw-bold fs-5" id="summaryCost">0.00 ETH</span>
                     </li>
-                    <li class="list-group-item bg-transparent text-secondary d-flex justify-content-between align-items-center px-0">
+                    <li
+                        class="list-group-item bg-transparent text-secondary d-flex justify-content-between align-items-center px-0">
                         Network
                         <span class="text-white fw-bold badge bg-primary" id="summaryNetwork">Local ETH</span>
                     </li>
                     <li class="list-group-item bg-transparent text-muted px-0 pb-0 shadow-none border-0">
-                        <small>By initiating this order, your funds will be locked in the <strong>dBlock Escrow</strong> smart contract until the final Delivery Receipt is confirmed.</small>
+                        <small>By initiating this order, your funds will be locked in the <strong>dBlock Escrow</strong>
+                            smart contract until the final Delivery Receipt is confirmed.</small>
                     </li>
                 </ul>
             </div>
@@ -113,22 +138,48 @@
 </div>
 
 <script>
+    function applyPreselectedSeller() {
+        const sellerSelect = document.getElementById('sellerSelect');
+        if (!sellerSelect) return;
+
+        const querySeller = new URLSearchParams(window.location.search).get('seller');
+        const storedSeller = localStorage.getItem('preselectedSeller');
+        const targetSeller = (querySeller || storedSeller || '').toLowerCase();
+        if (!targetSeller) return;
+
+        const optionToSelect = Array.from(sellerSelect.options).find(opt => (opt.value || '').toLowerCase() === targetSeller);
+        if (optionToSelect) {
+            sellerSelect.value = optionToSelect.value;
+        }
+
+        localStorage.removeItem('preselectedSeller');
+    }
+
     function toggleNetworkMode() {
         const t = document.getElementById('tokenSelect').value;
         document.getElementById('currencySymbol').innerText = t === 'USDT' ? 'USDT' : 'ETH';
         updateSummary();
     }
-    
+
     document.getElementById('amountInput').addEventListener('input', updateSummary);
     document.getElementById('multichainSelect').addEventListener('change', updateSummary);
-    
+
     function updateSummary() {
         const amt = document.getElementById('amountInput').value || '0.00';
         const t = document.getElementById('tokenSelect').value === 'USDT' ? 'USDT' : 'ETH';
         const m = document.getElementById('multichainSelect').value === 'true';
-        
+
         document.getElementById('summaryCost').innerText = `${amt} ${t}`;
         document.getElementById('summaryNetwork').innerText = m ? 'Multichain (ETH+BNB)' : 'Single-Chain (ETH)';
     }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const role = localStorage.getItem('userRole');
+        if (role === 'admin') {
+            window.location.href = '/dashboard';
+            return;
+        }
+        applyPreselectedSeller();
+    });
 </script>
 {% endblock %}

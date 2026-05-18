@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         updateChainUI(activeChain);
         
         web3Local = new Web3(new Web3.providers.HttpProvider(activeChain === 'BNB' ? "http://127.0.0.1:8546" : "http://127.0.0.1:8545"));
-        setupUI();
+        await setupUI();
         await loadConfig();
         await updateBalances();
         
@@ -49,7 +49,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 });
 
-function setupUI() {
+async function setupUI() {
     const acc = localStorage.getItem('selectedAccount');
     const role = localStorage.getItem('userRole');
     const name = localStorage.getItem('userName');
@@ -63,22 +63,64 @@ function setupUI() {
         dropdownAccountFull: document.getElementById('dropdownAccountFull')
     };
 
-    if (els.navUserName) els.navUserName.innerText = name;
-    if (els.navUserRole) els.navUserRole.innerText = role.toUpperCase();
-    if (els.dashUserName) els.dashUserName.innerText = name;
-    if (els.dashUserRole) els.dashUserRole.innerText = role.toUpperCase();
+    if (!acc) return;
+
+    if (els.navUserName) els.navUserName.innerText = name || 'User';
+    if (els.navUserRole) els.navUserRole.innerText = (role || 'guest').toUpperCase();
+    if (els.dashUserName) els.dashUserName.innerText = name || 'User';
+    if (els.dashUserRole) els.dashUserRole.innerText = (role || 'guest').toUpperCase();
     
     if (els.currentAccountHeader) els.currentAccountHeader.innerText = acc.substring(0,6) + '...' + acc.substring(acc.length-4);
     if (els.dropdownAccountFull) els.dropdownAccountFull.innerText = acc;
     
-    // Role-specific UI toggles
-    document.querySelectorAll('.dashboard-buyer-only').forEach(e => e.style.display = role === 'buyer' ? 'inline-block' : 'none');
-    document.querySelectorAll('.dashboard-seller-only').forEach(e => e.style.display = role === 'seller' ? 'inline-block' : 'none');
+    document.querySelectorAll('.dashboard-buyer-only').forEach(e => e.style.display = role === 'buyer' ? (e.classList.contains('row') ? 'flex' : 'inline-block') : 'none');
+    document.querySelectorAll('.dashboard-seller-only').forEach(e => e.style.display = role === 'seller' ? (e.classList.contains('row') ? 'flex' : 'inline-block') : 'none');
+    document.querySelectorAll('.dashboard-admin-only').forEach(e => e.style.display = role === 'admin' ? (e.classList.contains('row') ? 'flex' : 'block') : 'none');
+    document.querySelectorAll('.admin-only').forEach(e => e.style.display = role === 'admin' ? (e.classList.contains('row') ? 'flex' : 'block') : 'none');
+    document.querySelectorAll('.dashboard-agent-only').forEach(e => e.style.display = role === 'agent' ? (e.classList.contains('row') ? 'flex' : 'block') : 'none');
     
-    // Populate avatars dynamically based on address hash (visual only)
-    const avatars = document.querySelectorAll('.header-avatar, .avatar-circle');
-    avatars.forEach(el => {
-        el.style.backgroundColor = '#' + acc.substring(2, 8);
+    // Hide standard metrics and table for admin
+    if (role === 'admin') {
+        document.querySelectorAll('.dashboard-standard-metrics').forEach(e => e.style.display = 'none');
+        const tbl = document.getElementById('dashboardOrderListContainer');
+        if(tbl) tbl.style.display = 'none';
+    }
+    
+    // Apply a deterministic color while profile loads or when no image exists.
+    applyAvatarImage(null, acc);
+
+    // Load saved profile image and apply globally (sidebar + header).
+    try {
+        const res = await fetch(`/api/user/profile/${acc}`);
+        if (res.ok) {
+            const data = await res.json();
+            applyAvatarImage(data.profile_pic_base64 || null, acc);
+        }
+    } catch (e) {
+        console.warn('Profile avatar fetch failed:', e);
+    }
+}
+
+function applyAvatarImage(base64Data, address) {
+    const avatarNodes = [
+        { box: document.getElementById('sidebarAvatar'), fallback: document.getElementById('sidebarAvatarFallback') },
+        { box: document.getElementById('headerAvatar'), fallback: document.getElementById('headerAvatarFallback') }
+    ];
+
+    avatarNodes.forEach(node => {
+        if (!node.box) return;
+        const defaultColor = '#' + address.substring(2, 8);
+        if (base64Data) {
+            node.box.style.backgroundColor = 'transparent';
+            node.box.style.backgroundImage = `url(${base64Data})`;
+            node.box.style.backgroundSize = 'cover';
+            node.box.style.backgroundPosition = 'center';
+            if (node.fallback) node.fallback.style.display = 'none';
+        } else {
+            node.box.style.backgroundColor = defaultColor;
+            node.box.style.backgroundImage = 'none';
+            if (node.fallback) node.fallback.style.display = 'inline-block';
+        }
     });
 }
 
@@ -237,23 +279,116 @@ async function signAndSend(web3, account, txData, toAddress, value = "0") {
 
 async function loadDashboard() {
     const acc = localStorage.getItem('selectedAccount');
+    const role = localStorage.getItem('userRole');
     const tbody = document.getElementById('dashboardOrderTable');
+    
+    // Admin Dashboard Logic
+    if (role === 'admin') {
+        try {
+            const stats = await apiGet('/admin/dashboard_stats');
+            document.getElementById('adminTotalUsers').innerText = stats.total_users;
+            document.getElementById('adminTotalOrders').innerText = stats.total_orders;
+            document.getElementById('adminTotalAgents').innerText = stats.total_agents;
+            document.getElementById('adminTotalSellers').innerText = stats.total_sellers;
+            document.getElementById('adminTotalVolume').innerText = parseFloat(stats.total_volume).toFixed(4) + ' ETH';
+        } catch(e) { console.error("Error loading admin stats", e); }
+        return; // Admin doesn't need the table logic
+    }
+    
     if (!tbody) return;
     
     try {
         const orders = await apiGet('/orders/user/' + acc);
+        
+        // Populate standard stats
+        let active = orders.filter(o => o.status !== 'Completed').length;
+        let completed = orders.filter(o => o.status === 'Completed').length;
+        document.getElementById('statActive').innerText = active;
+        document.getElementById('statCompleted').innerText = completed;
+
+        // Agent specific logic: shipments by city
+        if (role === 'agent') {
+            const cityCount = {};
+            orders.forEach(o => {
+                const c = o.city || 'Unknown';
+                cityCount[c] = (cityCount[c] || 0) + 1;
+            });
+            const cityList = document.getElementById('agentCityStats');
+            cityList.innerHTML = '';
+            for(const [c, count] of Object.entries(cityCount)) {
+                cityList.innerHTML += `<li class="list-group-item d-flex justify-content-between align-items-center">
+                    ${c} <span class="badge bg-primary rounded-pill">${count}</span>
+                </li>`;
+            }
+            if(Object.keys(cityCount).length === 0) {
+                cityList.innerHTML = '<li class="list-group-item text-muted">No shipments assigned yet.</li>';
+            }
+        }
+        
+        // Buyer performance stats logic
+        if (role === 'buyer') {
+            try {
+                const perf = await apiGet('/buyer/performance_stats');
+                const sList = document.getElementById('buyerSellerStats');
+                const aList = document.getElementById('buyerAgentStats');
+                
+                if (sList) {
+                    sList.innerHTML = perf.sellers.length > 0 ? '' : '<div class="p-4 text-center text-muted">No seller data available.</div>';
+                    perf.sellers.forEach(s => {
+                        const initials = s.name.substring(0,2).toUpperCase();
+                        sList.innerHTML += `
+                            <div class="list-group-item border-0 border-bottom d-flex justify-content-between align-items-center py-3 px-4 bg-transparent hover-light">
+                                <div class="d-flex align-items-center">
+                                    <div class="avatar-sm rounded-circle bg-warning bg-opacity-10 text-warning d-flex align-items-center justify-content-center fw-bold me-3" style="width: 40px; height: 40px;">${initials}</div>
+                                    <div>
+                                        <h6 class="mb-0 fw-bold text-dark">${s.name}</h6>
+                                        <small class="text-muted font-monospace" style="font-size: 0.65rem; opacity: 0.8;">${s.address.substring(0,18)}...</small>
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge bg-primary px-3 py-2 rounded-pill fw-bold" style="font-size: 0.7rem;">${s.count} Orders</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                
+                if (aList) {
+                    aList.innerHTML = perf.agents.length > 0 ? '' : '<div class="p-4 text-center text-muted">No agent data available.</div>';
+                    perf.agents.forEach(a => {
+                        const initials = a.name.substring(0,2).toUpperCase();
+                        aList.innerHTML += `
+                            <div class="list-group-item border-0 border-bottom d-flex justify-content-between align-items-center py-3 px-4 bg-transparent hover-light">
+                                <div class="d-flex align-items-center">
+                                    <div class="avatar-sm rounded-circle bg-success bg-opacity-10 text-success d-flex align-items-center justify-content-center fw-bold me-3" style="width: 40px; height: 40px;">${initials}</div>
+                                    <div>
+                                        <h6 class="mb-0 fw-bold text-dark">${a.name}</h6>
+                                        <small class="text-muted font-monospace" style="font-size: 0.65rem; opacity: 0.8;">${a.address.substring(0,18)}...</small>
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge bg-success px-3 py-2 rounded-pill fw-bold" style="font-size: 0.7rem; background: #059669 !important;">${a.count} Shipments</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+            } catch(e) { console.error("Error loading performance stats", e); }
+        }
+        
         if (orders.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-white-50">No active orders found.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted">No active orders found.</td></tr>`;
             return;
         }
         
         tbody.innerHTML = '';
-        orders.slice(0, 5).forEach(o => { // Show top 5
+        orders.slice(0, 8).forEach(o => { // Show top 8
             tbody.innerHTML += `
                 <tr>
-                    <td class="ps-4 font-monospace text-white-50">#${o.order_id_onchain}</td>
-                    <td class="fw-bold">${o.product_description}</td>
-                    <td class="text-primary fw-bold">${o.amount} <span class="fs-6 text-white-50">${o.token_symbol}</span></td>
+                    <td class="ps-4 font-monospace text-secondary">#${o.order_id_onchain}</td>
+                    <td class="fw-bold text-dark">${o.product_description}</td>
+                    <td class="text-muted"><i class="fas fa-map-marker-alt me-1 text-danger"></i>${o.city || 'N/A'}</td>
+                    <td class="text-primary fw-bold">${o.amount} <span class="fs-6 text-muted">${o.token_symbol}</span></td>
                     <td><span class="status-badge status-${o.status}">${o.status}</span></td>
                     <td class="text-end pe-4">
                         <button class="btn btn-sm btn-outline-primary" onclick="viewOrderTracking('${o.id}')">
@@ -264,7 +399,26 @@ async function loadDashboard() {
             `;
         });
     } catch(e) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">Failed to load orders.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger">Failed to load orders.</td></tr>`;
+    }
+}
+
+async function getRouteGuide() {
+    const src = document.getElementById('routeSource').value;
+    const dest = document.getElementById('routeDest').value;
+    const resBox = document.getElementById('routeGuideResult');
+    
+    if(!src || !dest) {
+        return alert("Please enter both source and destination.");
+    }
+    
+    resBox.innerHTML = '<i class="fas fa-spinner fa-spin text-success me-2"></i> Fetching AI Route Guide...';
+    
+    try {
+        const data = await apiPost('/agent/route_guide', { source: src, destination: dest });
+        resBox.innerHTML = `<strong>Best Route (${src} &rarr; ${dest}):</strong><br/>${data.route_guide.replace(/\\n/g, '<br/>')}`;
+    } catch(e) {
+        resBox.innerHTML = `<span class="text-danger">Error: ${e.message}</span>`;
     }
 }
 
@@ -285,6 +439,9 @@ async function createSupplyChainOrder() {
         const contract = await getContractInstance('ETH');
         
         const desc = document.getElementById('productDesc').value;
+        const city = document.getElementById('cityInput')?.value || "";
+        const country = document.getElementById('countryInput')?.value || "";
+        const phone = document.getElementById('phoneInput')?.value || "";
         const seller = document.getElementById('sellerSelect').value;
         const agent = document.getElementById('agentSelect').value;
         const tokenType = document.getElementById('tokenSelect').value;
@@ -344,7 +501,10 @@ async function createSupplyChainOrder() {
             token: tokenType,
             isMultichain: isMulti,
             productDescription: desc,
-            ipfsHash: fileHash
+            ipfsHash: fileHash,
+            city: city,
+            country: country,
+            phone: phone
         });
         
         alert("Order created successfully!");
@@ -393,6 +553,17 @@ async function loadOrderTracking(dbId) {
     document.getElementById('detailAgent').innerText = o.agent;
     document.getElementById('detailNetwork').innerText = o.is_multichain ? "Multichain (ETH / BNB)" : "Single-Chain (ETH)";
     
+    // New Fields
+    document.getElementById('detailCity').innerText = o.city || 'N/A';
+    document.getElementById('detailCountry').innerText = o.country || 'N/A';
+    document.getElementById('detailPhone').innerText = o.phone || 'N/A';
+
+    // Agent Routing Visibility
+    const agentSec = document.getElementById('agentRoutingSection');
+    if (agentSec) {
+        agentSec.classList.toggle('d-none', localStorage.getItem('userRole') !== 'agent');
+    }
+    
     const badge = document.getElementById('orderStatusBadge');
     badge.className = `status-badge status-${o.status}`;
     badge.innerText = o.status;
@@ -400,6 +571,37 @@ async function loadOrderTracking(dbId) {
     renderTimeline(o);
     loadDocuments(o.id);
     setupActionPanel(o, acc);
+}
+
+async function checkBestRouteForOrder() {
+    if (!currentTrackingOrder) return;
+    const resBox = document.getElementById('routeResultBox');
+    const btn = document.getElementById('btnCheckRoute');
+    
+    const city = currentTrackingOrder.city;
+    const country = currentTrackingOrder.country;
+    
+    if (!city || !country) {
+        return alert("City and Country are required to check route.");
+    }
+
+    resBox.classList.remove('d-none');
+    resBox.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Fetching AI Route Guide...';
+    btn.disabled = true;
+
+    try {
+        // Assume origin is somewhere fixed or we just ask for a guide to this destination
+        // Since we don't have a fixed origin in the order, we'll ask for a guide TO this destination.
+        const data = await apiPost('/agent/route_guide', { 
+            source: "Major International Port", 
+            destination: `${city}, ${country}` 
+        });
+        resBox.innerHTML = `<strong>AI Route Guide:</strong><br/>${data.route_guide.replace(/\n/g, '<br/>')}`;
+    } catch(e) {
+        resBox.innerHTML = `<span class="text-danger">Error: ${e.message}</span>`;
+    } finally {
+        btn.disabled = false;
+    }
 }
 
 function renderTimeline(order) {

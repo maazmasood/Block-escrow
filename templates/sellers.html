@@ -1,0 +1,106 @@
+{% extends "layout.html" %}
+
+{% block title %}Show All Seller{% endblock %}
+{% block page_title %}Registered Sellers{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0 d-flex flex-row align-items-center gap-3 w-100 px-3 py-2 bg-white">
+            <i class="fas fa-search text-muted ms-2"></i>
+            <input type="text" class="bg-transparent border-0 text-dark w-100" style="outline:none; height: 40px;" id="searchSellersInput" placeholder="Search by name, niche, rate, area, email, or wallet...">
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th class="ps-4">Profile</th>
+                                <th class="ps-4">Name</th>
+                                <th>Wallet Address</th>                               
+                                <th>Niche</th>
+                                <th>Rate</th>
+                                <th>Area Coverage</th>                               
+                                <th class="pe-4">Joined</th>
+                                <th class="text-end pe-4">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sellerTableBody">
+                            {% for s in sellers %}
+                            <tr class="seller-row">
+                                <td class="ps-4">
+                                    {% if s.profile_pic_base64 %}
+                                    <img src="{{ s.profile_pic_base64 }}" alt="Profile"
+                                        style="width:36px;height:36px;border-radius:50%;object-fit:cover;">
+                                    {% else %}
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-light text-muted"
+                                        style="width:36px;height:36px;">
+                                        <i class="fas fa-user"></i>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td class="ps-4 fw-bold seller-name">{{ s.name }}</td>
+                                <td class="font-monospace small seller-address" title="{{ s.wallet_address }}">
+                                    {{ s.wallet_address[:8] }}...{{ s.wallet_address[-6:] }}
+                                </td>                               
+                                <td class="seller-niche">{{ s.niche if s.niche else '-' }}</td>
+                                <td class="seller-rate">{{ s.rate if s.rate else '-' }}</td>
+                                <td class="seller-area">{{ s.area_coverage if s.area_coverage else '-' }}</td>                                
+                                <td class="pe-4 text-muted">
+                                    {{ s.created_at.strftime('%Y-%m-%d %H:%M') if s.created_at else '-' }}
+                                </td>
+                                <td class="text-end pe-4">
+                                    <button type="button" class="btn btn-sm btn-primary buyer-order-btn d-none"
+                                        onclick="sendOrderToSeller('{{ s.wallet_address }}')">
+                                        <i class="fas fa-paper-plane me-1"></i>Send Order
+                                    </button>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center py-5 text-muted border-bottom-0">
+                                    <i class="fas fa-users fs-2 mb-3 d-block"></i>
+                                    No sellers found.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function sendOrderToSeller(walletAddress) {
+        localStorage.setItem('preselectedSeller', walletAddress);
+        window.location.href = `/create_order?seller=${encodeURIComponent(walletAddress)}`;
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const role = (localStorage.getItem('userRole') || '').toLowerCase();
+        if (role === 'buyer') {
+            document.querySelectorAll('.buyer-order-btn').forEach(btn => btn.classList.remove('d-none'));
+        }
+    });
+
+    document.getElementById('searchSellersInput').addEventListener('keyup', function () {
+        const term = this.value.toLowerCase();
+        document.querySelectorAll('.seller-row').forEach(row => {
+            const name = row.querySelector('.seller-name').innerText.toLowerCase();
+            const addr = row.querySelector('.seller-address').innerText.toLowerCase();
+            const niche = row.querySelector('.seller-niche').innerText.toLowerCase();
+            const rate = row.querySelector('.seller-rate').innerText.toLowerCase();
+            const area = row.querySelector('.seller-area').innerText.toLowerCase();
+            row.style.display = (name.includes(term) || addr.includes(term) || niche.includes(term) || rate.includes(term) || area.includes(term)) ? '' : 'none';
+        });
+    });
+</script>
+{% endblock %}

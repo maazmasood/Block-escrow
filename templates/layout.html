@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>dBlock - {% block title %}Dashboard{% endblock %}</title>
+    <title>BlockEscrow - {% block title %}Dashboard{% endblock %}</title>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -28,12 +28,12 @@
         <!-- Sidebar -->
         <div class="bg-glass border-end border-secondary" id="sidebar-wrapper">
             <div class="sidebar-heading text-center py-4 fs-4 fw-bold font-outfit tracking-wide border-bottom">
-                <i class="fas fa-link primary-text me-2"></i>dBlock <span class="text-secondary">Escrow</span>
+                <i class="fas fa-link primary-text me-2"></i>Block <span class="text-secondary">Escrow</span>
             </div>
             <div class="user-profile px-4 pb-3 mb-3 border-bottom text-center" id="sidebarUserProfile">
-                <div class="avatar-circle mx-auto mb-2 bg-primary text-white d-flex align-items-center justify-content-center fw-bold fs-4"
+                <div id="sidebarAvatar" class="avatar-circle mx-auto mb-2 bg-primary text-white d-flex align-items-center justify-content-center fw-bold fs-4"
                     style="height: 60px; width: 60px; border-radius: 50%;">
-                    ?
+                    <i class="fas fa-user" id="sidebarAvatarFallback"></i>
                 </div>
                 <h6 class="mb-0 fw-bold user-name-display text-dark" id="navUserName">Not Logged In</h6>
                 <small class="text-muted user-role-badge badge bg-light border text-dark rounded-pill mt-1" id="navUserRole">Guest</small>
@@ -44,7 +44,7 @@
                     <i class="fas fa-chart-line me-2"></i>Dashboard
                 </a>
                 <a href="/create_order"
-                    class="list-group-item list-group-item-action bg-transparent second-text fw-bold">
+                    class="list-group-item list-group-item-action bg-transparent second-text fw-bold dashboard-buyer-only" style="display:none;">
                     <i class="fas fa-file-contract me-2"></i>Create Order
                 </a>
                 <a href="/orders" class="list-group-item list-group-item-action bg-transparent second-text fw-bold">
@@ -53,9 +53,21 @@
                 <a href="/audits" class="list-group-item list-group-item-action bg-transparent second-text fw-bold">
                     <i class="fas fa-shield-alt me-2"></i>Audits & AI
                 </a>
+                <a href="/admin_management" class="list-group-item list-group-item-action bg-transparent second-text fw-bold admin-only" style="display:none;">
+                    <i class="fas fa-user-shield me-2"></i>Admin Management
+                </a>
                 <a href="/notifications"
                     class="list-group-item list-group-item-action bg-transparent second-text fw-bold d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-bell me-2"></i>Alerts</span>
+                </a>
+                <a href="/sellers" class="list-group-item list-group-item-action bg-transparent second-text fw-bold">
+                    <i class="fas fa-store me-2"></i>Show All Seller
+                </a>
+                <a href="/agents" class="list-group-item list-group-item-action bg-transparent second-text fw-bold">
+                    <i class="fas fa-user-shield me-2"></i>Show All Agents
+                </a>
+                <a href="/edit_profile" class="list-group-item list-group-item-action bg-transparent second-text fw-bold">
+                    <i class="fas fa-user-edit me-2"></i>Edit Profile
                 </a>
                 <a href="#" onclick="logout(); return false;"
                     class="list-group-item list-group-item-action bg-transparent text-danger fw-bold mt-5 border-top border-secondary">
@@ -114,8 +126,10 @@
                                 <button
                                     class="btn btn-white shadow-sm border d-flex align-items-center gap-2 text-dark fw-bold"
                                     type="button" id="accountDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <div class="header-avatar bg-primary rounded-circle"
-                                        style="width: 25px; height: 25px;"></div>
+                                    <div id="headerAvatar" class="header-avatar bg-primary rounded-circle d-flex align-items-center justify-content-center text-white"
+                                        style="width: 25px; height: 25px;">
+                                        <i class="fas fa-user" id="headerAvatarFallback" style="font-size: 0.65rem;"></i>
+                                    </div>
                                     <span id="currentAccountHeader" class="font-monospace">0x...</span>
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end bg-white border-light shadow-lg z-3 position-absolute"

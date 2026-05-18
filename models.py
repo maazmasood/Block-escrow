@@ -19,6 +19,10 @@ class Order(db.Model):
     is_multichain = db.Column(db.Boolean, default=False)
     mirror_address = db.Column(db.String(42), nullable=True)
 
+    city = db.Column(db.String(100), nullable=True)
+    country = db.Column(db.String(100), nullable=True)
+    phone = db.Column(db.String(50), nullable=True)
+
     status = db.Column(db.String(20), default='Created')
     
     # Timestamps
@@ -44,6 +48,9 @@ class Order(db.Model):
             'product_description': self.product_description,
             'amount': self.amount,
             'token_symbol': self.token_symbol,
+            'city': self.city,
+            'country': self.country,
+            'phone': self.phone,
             'is_multichain': self.is_multichain,
             'mirror_address': self.mirror_address,
             'status': self.status,
@@ -141,6 +148,11 @@ class User(db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), nullable=True)
     role = db.Column(db.String(20), default='buyer') # buyer, seller, agent, admin
+    bio = db.Column(db.Text, nullable=True)
+    profile_pic_base64 = db.Column(db.Text, nullable=True)
+    niche = db.Column(db.String(120), nullable=True)
+    rate = db.Column(db.String(120), nullable=True)
+    area_coverage = db.Column(db.String(200), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -149,5 +161,10 @@ class User(db.Model):
             'name': self.name,
             'email': self.email,
             'role': self.role,
+            'bio': self.bio,
+            'profile_pic_base64': self.profile_pic_base64,
+            'niche': self.niche,
+            'rate': self.rate,
+            'area_coverage': self.area_coverage,
             'created_at': self.created_at.isoformat()
         }

@@ -12,6 +12,7 @@ from models import Order, AuditLog, Notification, AISummary, User, OrderDocument
 from datetime import datetime, timedelta
 from web3 import Web3
 import json
+from sqlalchemy import inspect, text
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///fyp.db'
@@ -21,6 +22,38 @@ db.init_app(app)
 
 with app.app_context():
     db.create_all()
+    
+    # Lightweight schema sync for existing SQLite databases.
+    # This avoids forcing users to delete fyp.db when we add profile fields.
+    try:
+        existing_columns = {col['name'] for col in inspect(db.engine).get_columns('user')}
+        user_column_migrations = [
+            ('bio', 'TEXT'),
+            ('profile_pic_base64', 'TEXT'),
+            ('niche', 'VARCHAR(120)'),
+            ('rate', 'VARCHAR(120)'),
+            ('area_coverage', 'VARCHAR(200)')
+        ]
+        
+        for col_name, col_type in user_column_migrations:
+            if col_name not in existing_columns:
+                db.session.execute(text(f'ALTER TABLE "user" ADD COLUMN {col_name} {col_type}'))
+                
+        # Order table migration
+        order_columns = {col['name'] for col in inspect(db.engine).get_columns('order')}
+        order_migrations = [
+            ('city', 'VARCHAR(100)'),
+            ('country', 'VARCHAR(100)'),
+            ('phone', 'VARCHAR(50)')
+        ]
+        for col_name, col_type in order_migrations:
+            if col_name not in order_columns:
+                db.session.execute(text(f'ALTER TABLE "order" ADD COLUMN {col_name} {col_type}'))
+                
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.warning(f"Schema sync skipped/failed: {e}")
 
 # --- Email Service Setup ---
 import smtplib
@@ -188,6 +221,24 @@ def notifications():
     notifications = Notification.query.order_by(Notification.timestamp.desc()).all()
     return render_template('notifications.html', notifications=notifications)
 
+@app.route('/sellers')
+def sellers():
+    seller_users = User.query.filter_by(role='seller').order_by(User.created_at.desc()).all()
+    return render_template('sellers.html', sellers=seller_users)
+
+@app.route('/agents')
+def agents():
+    agent_users = User.query.filter_by(role='agent').order_by(User.created_at.desc()).all()
+    return render_template('agents.html', agents=agent_users)
+
+@app.route('/edit_profile')
+def edit_profile():
+    return render_template('edit_profile.html')
+
+@app.route('/admin_management')
+def admin_management():
+    return render_template('admin_management.html')
+
 # --- API Endpoints: Auth ---
 
 @app.route('/api/auth/login', methods=['POST'])
@@ -210,7 +261,15 @@ def get_user_email(address):
     user = db.session.get(User, address.lower())
     if not user:
         return jsonify({"error": "User not found"}), 404
-    return jsonify({"email": user.email, "name": user.name}), 200
+    return jsonify({
+        "email": user.email,
+        "name": user.name,
+        "bio": user.bio,
+        "profile_pic_base64": user.profile_pic_base64,
+        "niche": user.niche,
+        "rate": user.rate,
+        "area_coverage": user.area_coverage
+    }), 200
 
 @app.route('/api/user/email', methods=['POST'])
 def update_user_email():
@@ -218,6 +277,11 @@ def update_user_email():
     address = data.get('address')
     email = data.get('email')
     name = data.get('name')
+    bio = data.get('bio')
+    profile_pic_base64 = data.get('profile_pic_base64')
+    niche = data.get('niche')
+    rate = data.get('rate')
+    area_coverage = data.get('area_coverage')
     
     if not address or not email:
         return jsonify({"error": "Address and email are required"}), 400
@@ -229,8 +293,63 @@ def update_user_email():
     user.email = email
     if name:
         user.name = name
+    if bio is not None:
+        user.bio = bio
+    if profile_pic_base64 is not None:
+        user.profile_pic_base64 = profile_pic_base64
+    if niche is not None:
+        user.niche = niche
+    if rate is not None:
+        user.rate = rate
+    if area_coverage is not None:
+        user.area_coverage = area_coverage
     db.session.commit()
-    return jsonify({"message": "Profile updated", "email": user.email}), 200
+    return jsonify({"message": "Profile updated", "user": user.to_dict()}), 200
+
+@app.route('/api/user/profile/<address>', methods=['GET'])
+def get_user_profile(address):
+    user = db.session.get(User, address.lower())
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    return jsonify(user.to_dict()), 200
+
+@app.route('/api/user/profile', methods=['POST'])
+def update_user_profile():
+    data = request.json or {}
+    address = (data.get('address') or '').lower()
+    
+    if not address:
+        return jsonify({"error": "Address is required"}), 400
+    
+    user = db.session.get(User, address)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    name = data.get('name')
+    email = data.get('email')
+    bio = data.get('bio')
+    profile_pic_base64 = data.get('profile_pic_base64')
+    niche = data.get('niche')
+    rate = data.get('rate')
+    area_coverage = data.get('area_coverage')
+    
+    if name is not None:
+        user.name = name.strip()
+    if email is not None:
+        user.email = email.strip()
+    if bio is not None:
+        user.bio = bio.strip()
+    if profile_pic_base64 is not None:
+        user.profile_pic_base64 = profile_pic_base64
+    if niche is not None:
+        user.niche = niche.strip()
+    if rate is not None:
+        user.rate = rate.strip()
+    if area_coverage is not None:
+        user.area_coverage = area_coverage.strip()
+    
+    db.session.commit()
+    return jsonify({"message": "Profile updated", "user": user.to_dict()}), 200
 
 @app.route('/api/auth/register', methods=['POST'])
 def auth_register():
@@ -247,7 +366,17 @@ def auth_register():
     if existing:
         return jsonify({"error": "User already registered"}), 409
         
-    user = User(wallet_address=address, name=name, role=role, email="")
+    user = User(
+        wallet_address=address,
+        name=name,
+        role=role,
+        email="",
+        bio="",
+        profile_pic_base64="",
+        niche="",
+        rate="",
+        area_coverage=""
+    )
     db.session.add(user)
     db.session.commit()
     
@@ -263,15 +392,62 @@ def get_users_by_role(role):
     users = User.query.filter_by(role=role).all()
     return jsonify([u.to_dict() for u in users]), 200
 
+@app.route('/api/admin/users', methods=['GET'])
+def get_all_users():
+    users = User.query.order_by(User.created_at.desc()).all()
+    return jsonify([u.to_dict() for u in users]), 200
+
+@app.route('/api/admin/users/<address>', methods=['DELETE'])
+def delete_user(address):
+    address = address.lower()
+    user = db.session.get(User, address)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    # Optional: Prevent deleting the last admin or yourself
+    # For now, let's just delete
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({"message": f"User {address} deleted"}), 200
+
+@app.route('/api/admin/users/<address>/role', methods=['POST'])
+def update_user_role_admin(address):
+    data = request.json
+    new_role = data.get('role')
+    if not new_role or new_role not in ['buyer', 'seller', 'agent', 'admin']:
+        return jsonify({"error": "Invalid role"}), 400
+    
+    address = address.lower()
+    user = db.session.get(User, address)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    user.role = new_role
+    db.session.commit()
+    
+    # If promoted to admin, promote on-chain too
+    if new_role == 'admin':
+        from threading import Thread
+        Thread(target=promote_to_onchain_admin, args=(address,)).start()
+        
+    return jsonify({"message": f"User {address} role updated to {new_role}"}), 200
+
 # --- API Endpoints: Orders ---
 
 @app.route('/api/order/create', methods=['POST'])
 def create_order_log():
     data = request.json
+    buyer_addr = data.get('buyer', '').lower()
+    
+    # Validation: Admin cannot create orders
+    user = db.session.get(User, buyer_addr)
+    if user and user.role == 'admin':
+        return jsonify({"error": "Administrators are restricted from creating orders."}), 403
+
     new_order = Order(
         contract_address=data.get('contractAddress'),
         order_id_onchain=data.get('orderIdOnchain'),
-        buyer_address=data.get('buyer', '').lower(),
+        buyer_address=buyer_addr,
         seller_address=data.get('seller', '').lower(),
         agent_address=data.get('agent', '').lower(),
         amount=float(data.get('amount')),
@@ -279,6 +455,9 @@ def create_order_log():
         is_multichain=data.get('isMultichain', False),
         mirror_address=data.get('mirrorAddress'),
         product_description=data.get('productDescription', 'Supply Chain Order'),
+        city=data.get('city'),
+        country=data.get('country'),
+        phone=data.get('phone'),
         status='Created'
     )
     db.session.add(new_order)
@@ -308,6 +487,84 @@ def create_order_log():
         Thread(target=process_document_ocr, args=(doc.id,)).start()
         
     return jsonify({"message": "Order logged", "id": new_order.id}), 201
+
+@app.route('/api/admin/dashboard_stats', methods=['GET'])
+def get_admin_dashboard_stats():
+    total_users = User.query.count()
+    total_orders = Order.query.count()
+    total_agents = User.query.filter_by(role='agent').count()
+    total_sellers = User.query.filter_by(role='seller').count()
+    total_volume = db.session.query(db.func.sum(Order.amount)).scalar() or 0
+    return jsonify({
+        "total_users": total_users,
+        "total_orders": total_orders,
+        "total_agents": total_agents,
+        "total_sellers": total_sellers,
+        "total_volume": total_volume
+    }), 200
+
+@app.route('/api/buyer/performance_stats', methods=['GET'])
+def get_performance_stats():
+    # Top Sellers based on total orders taken
+    seller_stats = db.session.query(
+        User.name, User.wallet_address, db.func.count(Order.id).label('total_orders')
+    ).join(Order, Order.seller_address == User.wallet_address)\
+     .filter(User.role == 'seller')\
+     .group_by(User.wallet_address)\
+     .order_by(db.text('total_orders DESC'))\
+     .limit(5).all()
+
+    # Top Agents based on total orders taken
+    agent_stats = db.session.query(
+        User.name, User.wallet_address, db.func.count(Order.id).label('total_orders')
+    ).join(Order, Order.agent_address == User.wallet_address)\
+     .filter(User.role == 'agent')\
+     .group_by(User.wallet_address)\
+     .order_by(db.text('total_orders DESC'))\
+     .limit(5).all()
+
+    return jsonify({
+        "sellers": [{"name": s[0], "address": s[1], "count": s[2]} for s in seller_stats],
+        "agents": [{"name": a[0], "address": a[1], "count": a[2]} for a in agent_stats]
+    }), 200
+
+@app.route('/api/agent/route_guide', methods=['POST'])
+def agent_route_guide():
+    data = request.json
+    source = data.get('source')
+    destination = data.get('destination')
+    if not source or not destination:
+        return jsonify({"error": "Source and destination are required"}), 400
+        
+    groq_api_key = os.environ.get("GROQ_API_KEY")
+    if not groq_api_key:
+        return jsonify({"error": "GROQ_API_KEY environment variable not set."}), 500
+        
+    prompt = f"What is the best shipping route for logistics between {source} and {destination}? Give a very short summary suitable for a dashboard."
+    
+    headers = {
+        "Authorization": f"Bearer {groq_api_key}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": "You are a helpful logistics assistant."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.5,
+        "max_tokens": 150
+    }
+
+    try:
+        response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        result = response.json()
+        summary_text = result["choices"][0]["message"]["content"]
+        return jsonify({"route_guide": summary_text}), 200
+    except Exception as e:
+        return jsonify({"route_guide": "Could not determine route at this time due to an error."}), 500
 
 @app.route('/api/orders/user/<address>', methods=['GET'])
 def get_user_orders(address):

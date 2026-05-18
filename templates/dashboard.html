@@ -4,47 +4,8 @@
 {% block page_title %}Supply Chain Overview{% endblock %}
 
 {% block content %}
-<!-- Top Metrics Row -->
-<div class="row mb-5">
-    <!-- Active Orders -->
-    <div class="col-md-6 mb-4 mb-md-0">
-        <div class="card h-100 shadow-sm border-0">
-            <div class="card-body p-4 d-flex align-items-center">
-                <div class="p-3 rounded-circle"
-                    style="background: #eff6ff; border: 1px solid #bfdbfe;">
-                    <i class="fas fa-boxes fs-2" style="color: #2563eb;"></i>
-                </div>
-                <div class="ms-4">
-                    <p class="text-secondary mb-1 fw-bold text-uppercase"
-                        style="letter-spacing: 0.05em; font-size: 0.8rem;">Active Orders</p>
-                    <h3 class="mb-0 fw-bold text-dark">{{ active_count }}</h3>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Completed Deliveries -->
-    <div class="col-md-6 mb-4 mb-md-0">
-        <div class="card h-100 shadow-sm border-0">
-            <div class="card-body p-4 d-flex align-items-center">
-                <div class="p-3 rounded-circle"
-                    style="background: #ecfdf5; border: 1px solid #d1fae5;">
-                    <i class="fas fa-check-double fs-2" style="color: #059669;"></i>
-                </div>
-                <div class="ms-4">
-                    <p class="text-secondary mb-1 fw-bold text-uppercase"
-                        style="letter-spacing: 0.05em; font-size: 0.8rem;">Completed</p>
-                    <h3 class="mb-0 fw-bold text-dark">{{ completed_count }}</h3>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Total Volume -->
-</div>
-
+<!-- Active Role Context Panel (Common) -->
 <div class="row">
-    <!-- Active Role Context Panel -->
     <div class="col-lg-12 mb-4">
         <div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);">
             <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
@@ -65,13 +26,232 @@
     </div>
 </div>
 
-<!-- List of User's Orders -->
-<div class="row">
+<!-- ================= BUYER / SELLER / AGENT STATS (Shared Base) ================= -->
+<div class="row mb-5 dashboard-standard-metrics">
+    <!-- Active Orders -->
+    <div class="col-md-6 mb-4 mb-md-0">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-body p-4 d-flex align-items-center">
+                <div class="p-3 rounded-circle"
+                    style="background: #eff6ff; border: 1px solid #bfdbfe;">
+                    <i class="fas fa-boxes fs-2" style="color: #2563eb;"></i>
+                </div>
+                <div class="ms-4">
+                    <p class="text-secondary mb-1 fw-bold text-uppercase"
+                        style="letter-spacing: 0.05em; font-size: 0.8rem;">Active Orders</p>
+                    <h3 class="mb-0 fw-bold text-dark" id="statActive">{{ active_count }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Completed Deliveries -->
+    <div class="col-md-6 mb-4 mb-md-0">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-body p-4 d-flex align-items-center">
+                <div class="p-3 rounded-circle"
+                    style="background: #ecfdf5; border: 1px solid #d1fae5;">
+                    <i class="fas fa-check-double fs-2" style="color: #059669;"></i>
+                </div>
+                <div class="ms-4">
+                    <p class="text-secondary mb-1 fw-bold text-uppercase"
+                        style="letter-spacing: 0.05em; font-size: 0.8rem;">Completed</p>
+                    <h3 class="mb-0 fw-bold text-dark" id="statCompleted">{{ completed_count }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= ADMIN DASHBOARD ================= -->
+<div class="dashboard-admin-only" style="display:none;">
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 bg-white h-100">
+                <div class="card-body text-center p-4">
+                    <div class="rounded-circle bg-primary bg-opacity-10 text-primary mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                        <i class="fas fa-users fs-3"></i>
+                    </div>
+                    <h4 class="fw-bold mb-1" id="adminTotalUsers">0</h4>
+                    <p class="text-muted small text-uppercase fw-bold mb-0">Total Users</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 bg-white h-100">
+                <div class="card-body text-center p-4">
+                    <div class="rounded-circle bg-info bg-opacity-10 text-info mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                        <i class="fas fa-box-open fs-3"></i>
+                    </div>
+                    <h4 class="fw-bold mb-1" id="adminTotalOrders">0</h4>
+                    <p class="text-muted small text-uppercase fw-bold mb-0">Total Shipments</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 bg-white h-100">
+                <div class="card-body text-center p-4">
+                    <div class="rounded-circle bg-warning bg-opacity-10 text-warning mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                        <i class="fas fa-user-shield fs-3"></i>
+                    </div>
+                    <h4 class="fw-bold mb-1" id="adminTotalAgents">0</h4>
+                    <p class="text-muted small text-uppercase fw-bold mb-0">Total Agents</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 bg-white h-100">
+                <div class="card-body text-center p-4">
+                    <div class="rounded-circle bg-success bg-opacity-10 text-success mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                        <i class="fas fa-store fs-3"></i>
+                    </div>
+                    <h4 class="fw-bold mb-1" id="adminTotalSellers">0</h4>
+                    <p class="text-muted small text-uppercase fw-bold mb-0">Total Sellers</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow border-0 overflow-hidden" style="border-radius: 20px;">
+                <div class="card-body p-0">
+                    <div class="row g-0">
+                        <!-- Volume display with gradient -->
+                        <div class="col-lg-5 text-white p-5 d-flex flex-column justify-content-center align-items-center text-center" 
+                             style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); position: relative;">
+                            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.1; background: url('https://www.transparenttextures.com/patterns/cubes.png');"></div>
+                            <i class="fas fa-wallet mb-3" style="font-size: 3rem; opacity: 0.5;"></i>
+                            <p class="text-uppercase tracking-widest fw-bold mb-1" style="font-size: 0.8rem; letter-spacing: 2px;">Global Escrow Liquidity</p>
+                            <h2 class="display-4 fw-bold mb-0 font-outfit" id="adminTotalVolume">0.00 ETH</h2>
+                        </div>
+                        <!-- Quick Actions -->
+                        <div class="col-lg-7 p-5 bg-white d-flex flex-column justify-content-center">
+                            <h5 class="fw-bold mb-4 text-dark"><i class="fas fa-bolt text-warning me-2"></i>Platform Administration</h5>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <a href="/orders" class="btn btn-primary w-100 py-3 d-flex align-items-center justify-content-center gap-2 shadow-sm">
+                                        <i class="fas fa-list-check"></i> Manage Orders
+                                    </a>
+                                </div>
+                                <div class="col-md-6">
+                                    <a href="/sellers" class="btn btn-outline-success w-100 py-3 d-flex align-items-center justify-content-center gap-2">
+                                        <i class="fas fa-store"></i> Seller Directory
+                                    </a>
+                                </div>
+                                <div class="col-md-6">
+                                    <a href="/agents" class="btn btn-outline-info w-100 py-3 d-flex align-items-center justify-content-center gap-2">
+                                        <i class="fas fa-user-shield"></i> Agent Registry
+                                    </a>
+                                </div>
+                                <div class="col-md-6">
+                                    <a href="/admin_management" class="btn btn-danger w-100 py-3 d-flex align-items-center justify-content-center gap-2 shadow-sm">
+                                        <i class="fas fa-users-cog"></i> User Management
+                                    </a>
+                                </div>
+                                <div class="col-md-6">
+                                    <a href="/audits" class="btn btn-outline-secondary w-100 py-3 d-flex align-items-center justify-content-center gap-2">
+                                        <i class="fas fa-file-invoice"></i> System Audits
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= AGENT DASHBOARD ================= -->
+<div class="dashboard-agent-only" style="display:none;">
+    <div class="row mb-4">
+        <div class="col-md-7">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0 fw-bold"><i class="fas fa-map-marked-alt text-info me-2"></i>Shipments by City</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush" id="agentCityStats">
+                        <li class="list-group-item text-muted">Loading city stats...</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-5">
+            <div class="card shadow-sm border-0 h-100" style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);">
+                <div class="card-header bg-transparent py-4 border-bottom-0">
+                    <h5 class="mb-0 fw-bold d-flex align-items-center"><i class="fas fa-wand-magic-sparkles text-primary me-2"></i>AI Route Guide</h5>
+                </div>
+                <div class="card-body px-4 pb-4">
+                    <p class="text-muted small mb-4">Leverage our simple LLM-powered engine for optimal logistics between cities.</p>
+                    <div class="mb-3">
+                        <div class="input-group mb-3 shadow-sm border-0">
+                            <span class="input-group-text bg-white border-0"><i class="fas fa-location-dot text-primary"></i></span>
+                            <input type="text" id="routeSource" class="form-control border-0" placeholder="Origin City">
+                        </div>
+                        <div class="input-group mb-3 shadow-sm border-0">
+                            <span class="input-group-text bg-white border-0"><i class="fas fa-map-pin text-danger"></i></span>
+                            <input type="text" id="routeDest" class="form-control border-0" placeholder="Destination City">
+                        </div>
+                        <button class="btn btn-primary w-100 py-2 fw-bold" onclick="getRouteGuide()">
+                            <i class="fas fa-paper-plane me-2"></i>Get Smart Route Advice
+                        </button>
+                    </div>
+                    <div id="routeGuideResult" class="p-3 bg-white border-0 shadow-sm rounded-4 mt-3 text-secondary small" style="min-height: 120px; font-style: italic; border-left: 4px solid #2563eb !important;">
+                        AI route suggestions will appear here...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= BUYER PERFORMANCE STATS (Top Sellers & Agents) ================= -->
+<div class="row mb-5 dashboard-buyer-only" id="buyerPerfRow" style="display:none;">
+    <div class="col-lg-6 mb-4 mb-lg-0">
+        <div class="card border-0 shadow-sm h-100 overflow-hidden" style="border-radius: 20px;">
+            <div class="card-header bg-white border-bottom-0 pt-4 px-4 pb-2 d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0 fw-bold text-dark"><i class="fas fa-crown text-warning me-2"></i>Top Rated Sellers</h5>
+                    <p class="text-muted small mb-0 mt-1">Leading suppliers by order volume</p>
+                </div>
+            </div>
+            <div class="card-body px-0 pb-0">
+                <div class="list-group list-group-flush" id="buyerSellerStats">
+                    <div class="text-center py-5">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                        <p class="text-muted small mt-2">Analyzing seller data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100 overflow-hidden" style="border-radius: 20px;">
+            <div class="card-header bg-white border-bottom-0 pt-4 px-4 pb-2 d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0 fw-bold text-dark"><i class="fas fa-shipping-fast text-primary me-2"></i>Premier Logistics</h5>
+                    <p class="text-muted small mb-0 mt-1">Most active transport agents</p>
+                </div>
+            </div>
+            <div class="card-body px-0 pb-0">
+                <div class="list-group list-group-flush" id="buyerAgentStats">
+                    <div class="text-center py-5">
+                        <div class="spinner-border spinner-border-sm text-success" role="status"></div>
+                        <p class="text-muted small mt-2">Loading logistics metrics...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= LIST OF ORDERS (For Buyer/Seller/Agent mostly) ================= -->
+<div class="row" id="dashboardOrderListContainer">
     <div class="col-12">
         <div class="card border-0 shadow-sm">
-            <div
-                class="card-header bg-transparent py-4 d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold text-dark"><i class="fas fa-clipboard-list primary-text me-2"></i>My Active Orders</h5>
+            <div class="card-header bg-transparent py-4 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold text-dark"><i class="fas fa-clipboard-list primary-text me-2"></i>Recent Shipments</h5>
                 <a href="/orders" class="btn btn-sm btn-outline-primary">View All</a>
             </div>
             <div class="card-body p-0">
@@ -81,6 +261,7 @@
                             <tr>
                                 <th class="ps-4">ID</th>
                                 <th>Product Details</th>
+                                <th>Destination (City)</th>
                                 <th>Amount</th>
                                 <th>Status</th>
                                 <th class="text-end pe-4">Action</th>
@@ -88,7 +269,7 @@
                         </thead>
                         <tbody id="dashboardOrderTable">
                             <tr>
-                                <td colspan="5" class="text-center py-4 text-muted">Loading orders...</td>
+                                <td colspan="6" class="text-center py-4 text-muted">Loading orders...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -97,4 +278,5 @@
         </div>
     </div>
 </div>
+
 {% endblock %}
